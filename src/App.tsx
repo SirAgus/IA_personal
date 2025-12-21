@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
 import { MainSidebar } from './components/MainSidebar';
 import { ChatMessage } from './components/ChatMessage';
-import { type Agent, createThread, addMessage, getThreadMessages, getThreadById, getAgentById, updateThreadAgent } from './services/db';
+import { type Agent } from './services/db';
 import './index.css';
 
 interface Message {
@@ -14,8 +14,7 @@ interface Message {
   };
 }
 
-const API_URL = import.meta.env.CHAT_API_URL;
-const MODEL = import.meta.env.CHAT_MODEL;
+const BACKEND_URL = import.meta.env.CHAT_API_URL || 'http://localhost:3000';
 const AUTH_USER_ENV = import.meta.env.AUTH_USER;
 const AUTH_PASS_ENV = import.meta.env.AUTH_PASSWORD;
 
@@ -33,15 +32,34 @@ function App() {
   const [currentThreadId, setCurrentThreadId] = useState<number | null>(null);
   const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [availableModels, setAvailableModels] = useState<string[]>([]);
+  const [selectedModel, setSelectedModel] = useState<string>('local-model');
   const [reasoningLevel, setReasoningLevel] = useState<'instant' | 'low' | 'medium' | 'high'>(() => {
     return (localStorage.getItem('reasoningLevel') as 'instant' | 'low' | 'medium' | 'high') || 'medium';
   });
+
+  const isCreatingThread = useRef(false);
 
   useEffect(() => {
     const storedAuth = localStorage.getItem('isAuthenticated');
     if (storedAuth === 'true') {
       setIsAuthenticated(true);
     }
+
+    // Fetch available models
+    const fetchModels = async () => {
+      try {
+        const res = await fetch(`${BACKEND_URL}/models`);
+        if (res.ok) {
+          const models = await res.json();
+          setAvailableModels(models);
+          if (models.length > 0) setSelectedModel(models[0]);
+        }
+      } catch (err) {
+        console.error("Error fetching models:", err);
+      }
+    };
+    fetchModels();
   }, []);
 
   // Sync state when thread changes
@@ -49,22 +67,41 @@ function App() {
     const loadThreadData = async () => {
       if (!isAuthenticated || !currentThreadId) return;
 
-      const thread = await getThreadById(currentThreadId);
-      if (thread) {
-        if (thread.agent_id) {
-          const agent = await getAgentById(thread.agent_id);
-          setSelectedAgent(agent);
-        } else {
-          setSelectedAgent(null);
-        }
+      // If we just created this thread locally, don't fetch/overwrite 
+      // until the interaction is finished to avoid wiping the user message.
+      if (isCreatingThread.current) {
+        isCreatingThread.current = false;
+        return;
+      }
 
-        const threadMsgs = await getThreadMessages(currentThreadId);
-        setMessages(threadMsgs.map(msg => ({
-          role: msg.role as 'user' | 'assistant' | 'system' | 'tool',
+      try {
+        const res = await fetch(`${BACKEND_URL}/threads/${currentThreadId}/messages`);
+        if (!res.ok) throw new Error('Failed to load messages');
+        const data = await res.json();
+
+        setMessages(data.messages.map((msg: any) => ({
+          role: msg.role,
           content: msg.content,
-          reasoning_content: msg.reasoning_content || undefined,
+          reasoning_content: msg.reasoning_content,
           metrics: msg.metrics,
         })));
+
+        // Optionally fetch thread details to set selectedAgent
+        const threadRes = await fetch(`${BACKEND_URL}/threads/${currentThreadId}`);
+        if (threadRes.ok) {
+          const threadData = await threadRes.json();
+          if (threadData.agent_id) {
+            const agentRes = await fetch(`${BACKEND_URL}/agents/${threadData.agent_id}`);
+            if (agentRes.ok) {
+              const agentData = await agentRes.json();
+              setSelectedAgent(agentData);
+            }
+          } else {
+            setSelectedAgent(null);
+          }
+        }
+      } catch (err) {
+        console.error("Error loading thread:", err);
       }
     };
     loadThreadData();
@@ -100,7 +137,11 @@ function App() {
   const handleSelectAgent = async (agent: Agent | null) => {
     setSelectedAgent(agent);
     if (currentThreadId) {
-      await updateThreadAgent(currentThreadId, agent?.id || null);
+      await fetch(`${BACKEND_URL}/threads/${currentThreadId}/agent`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ agent_id: agent?.id || null })
+      });
     }
   };
 
@@ -125,208 +166,117 @@ function App() {
     if (!targetThreadId) {
       const firstWords = input.trim().split(' ').slice(0, 5).join(' ');
       const title = firstWords.length > 30 ? firstWords.substring(0, 30) + '...' : firstWords;
-      targetThreadId = await createThread(title || 'Nuevo Chat', selectedAgent?.id);
+
+      const res = await fetch(`${BACKEND_URL}/threads`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title, agent_id: selectedAgent?.id })
+      });
+      const data = await res.json();
+      targetThreadId = data.id;
+      isCreatingThread.current = true; // Mark as internal creation
       setCurrentThreadId(targetThreadId);
     }
+
+    if (!targetThreadId) return;
 
     const userMessage: Message = { role: 'user', content: input };
     const newMessages = [...messages, userMessage];
     setMessages(newMessages);
 
-    await addMessage({
-      thread_id: targetThreadId,
-      role: 'user',
-      content: input
-    });
-
     setInput('');
     setIsLoading(true);
 
     try {
-      await processChatInteraction(newMessages, targetThreadId);
+      await processChatInteraction(newMessages, targetThreadId, selectedAgent);
     } catch (err) {
       console.error(err);
-      setMessages(prev => [...prev, { role: 'assistant', content: 'Error al procesar la solicitud.' }]);
+      setMessages(prev => [...prev, { role: 'assistant', content: 'Inicia tu servidor local para responder.' }]);
     } finally {
       setIsLoading(false);
     }
   };
 
-  const processChatInteraction = async (allMessages: Message[], threadId: number) => {
-    const MAX_ITERATIONS = 5;
-    let iteration = 0;
+  const processChatInteraction = async (allMessages: Message[], threadId: number, agent: Agent | null) => {
     const contextMessages = allMessages.slice(-10);
-    let msgs = [...contextMessages];
 
-    const GLOBAL_SYSTEM_PROMPT = `
-Eres un asistente de IA útil y capaz.
-Tienes acceso a herramientas para buscar en internet (web_search) y ver la fecha (get_current_date).
-Úsalas cuando el usuario te pida información actual o fechas.
-No inventes información si puedes buscarla.
-    `.trim();
+    setMessages(prev => [...prev, { role: 'assistant', content: '', reasoning_content: '' }]);
 
-    const combinedSystemPrompt = selectedAgent
-      ? `${GLOBAL_SYSTEM_PROMPT}\n\n---\n\nInstrucciones Específicas del Agente:\n${selectedAgent.system_prompt}${reasoningLevel === 'high' ? '\n\nRazona paso a paso y justifica cada decisión.' : ''}${(reasoningLevel === 'instant' || reasoningLevel === 'low') ? '\n\nIMPORTANT: Do NOT think, reason or use internal monologue. Provide a direct and concise answer immediately.' : ''}`
-      : `${GLOBAL_SYSTEM_PROMPT}${reasoningLevel === 'high' ? '\n\nRazona paso a paso y justifica cada decisión.' : ''}${(reasoningLevel === 'instant' || reasoningLevel === 'low') ? '\n\nIMPORTANT: Do NOT think, reason or use internal monologue. Provide a direct and concise answer immediately.' : ''}`;
-
-    const initialSystemMessages = [{ role: 'system', content: combinedSystemPrompt }];
-
-    const maxTokensMap = {
-      instant: 64,
-      low: 128,
-      medium: 1024,
-      high: 4096
-    };
-
-    while (iteration < MAX_ITERATIONS) {
-      iteration++;
-      setMessages(prev => [...prev, { role: 'assistant', content: '', reasoning_content: '' }]);
-
-      const messagesPayload = [
-        ...initialSystemMessages,
-        ...msgs.map(m => ({
-          role: m.role,
-          content: m.content,
-          tool_calls: (m as any).tool_calls,
-          tool_call_id: (m as any).tool_call_id
-        }))
-      ];
-
-      const { tools } = await import('./services/tools');
-
-      const response = await fetch(API_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: MODEL,
-          messages: messagesPayload,
-          tools: tools,
-          stream: true,
-          max_tokens: maxTokensMap[reasoningLevel],
-          reasoning: { enabled: reasoningLevel !== 'low' && reasoningLevel !== 'instant' }
-        }),
-      });
-
-      if (!response.body) throw new Error('No response body');
-
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = '';
-      let assistantContent = '';
-      let assistantReasoning = '';
-      let toolCallsArgs: any[] = [];
-      let currentToolCallIndex = -1;
-      let reasoningStartTime: number | null = null;
-      let reasoningEndTime: number | null = null;
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n');
-        buffer = lines.pop() || '';
-
-        for (const line of lines) {
-          if (!line.startsWith('data: ') || line.trim() === 'data: [DONE]') continue;
-
-          const jsonStr = line.replace('data: ', '');
-          try {
-            const data = JSON.parse(jsonStr);
-            const delta = data.choices?.[0]?.delta;
-            if (!delta) continue;
-
-            if (delta.reasoning_content && reasoningLevel !== 'instant' && reasoningLevel !== 'low') {
-              if (reasoningStartTime === null) reasoningStartTime = Date.now();
-              assistantReasoning += delta.reasoning_content;
-              setMessages(prev => {
-                const newPrev = [...prev];
-                const lastMsg = newPrev[newPrev.length - 1];
-                if (lastMsg.role === 'assistant') lastMsg.reasoning_content = assistantReasoning;
-                return newPrev;
-              });
-            }
-
-            if (delta.content) {
-              if (reasoningStartTime !== null && reasoningEndTime === null) {
-                reasoningEndTime = Date.now();
-                setMessages(prev => {
-                  const newPrev = [...prev];
-                  const lastMsg = newPrev[newPrev.length - 1];
-                  if (lastMsg.role === 'assistant') {
-                    lastMsg.metrics = { reasoningDurationMs: (reasoningEndTime! - reasoningStartTime!) };
-                  }
-                  return newPrev;
-                });
-              }
-              assistantContent += delta.content;
-              setMessages(prev => {
-                const newPrev = [...prev];
-                const lastMsg = newPrev[newPrev.length - 1];
-                if (lastMsg.role === 'assistant') lastMsg.content = assistantContent;
-                return newPrev;
-              });
-            }
-
-            if (delta.tool_calls) {
-              const tc = delta.tool_calls[0];
-              if (tc.id) {
-                toolCallsArgs.push({ id: tc.id, function: { name: tc.function.name, arguments: '' }, type: 'function' });
-                currentToolCallIndex = toolCallsArgs.length - 1;
-              } else if (currentToolCallIndex >= 0 && tc.function?.arguments) {
-                toolCallsArgs[currentToolCallIndex].function.arguments += tc.function.arguments;
-              }
-            }
-          } catch (e) { }
-        }
-      }
-
-      if (reasoningStartTime !== null && reasoningEndTime === null) {
-        reasoningEndTime = Date.now();
-        setMessages(prev => {
-          const newPrev = [...prev];
-          const lastMsg = newPrev[newPrev.length - 1];
-          if (lastMsg.role === 'assistant') {
-            lastMsg.metrics = { reasoningDurationMs: (reasoningEndTime! - reasoningStartTime!) };
-            lastMsg.content = assistantContent;
-          }
-          return newPrev;
-        });
-      }
-
-      if (toolCallsArgs.length > 0) {
-        await addMessage({
-          thread_id: threadId,
-          role: 'assistant',
-          content: assistantContent,
-          reasoning_content: assistantReasoning,
-          metrics: { reasoningDurationMs: reasoningEndTime && reasoningStartTime ? reasoningEndTime - reasoningStartTime : undefined }
-        });
-
-        msgs.push({ role: 'assistant', content: assistantContent, tool_calls: toolCallsArgs } as any);
-
-        const toolOutputs = [];
-        const { executeTool } = await import('./services/tools');
-
-        for (const toolCall of toolCallsArgs) {
-          const args = JSON.parse(toolCall.function.arguments);
-          const result = await executeTool(toolCall.function.name, args);
-          const outputMsg = { role: 'tool', tool_call_id: toolCall.id, content: String(result) };
-          toolOutputs.push(outputMsg);
-          await addMessage({ thread_id: threadId, role: 'tool', content: String(result) });
-        }
-        msgs.push(...toolOutputs as any);
-        continue;
-      }
-
-      await addMessage({
+    const response = await fetch(`${BACKEND_URL}/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        messages: contextMessages,
         thread_id: threadId,
-        role: 'assistant',
-        content: assistantContent,
-        reasoning_content: assistantReasoning,
-        metrics: { reasoningDurationMs: reasoningEndTime && reasoningStartTime ? reasoningEndTime - reasoningStartTime : undefined }
-      });
-      return;
+        agent_id: agent?.id,
+        model: selectedModel,
+        options: {
+          reasoning: reasoningLevel
+        }
+      }),
+    });
+
+    if (!response.ok) throw new Error('API Error');
+    if (!response.body) throw new Error('No response body');
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    let assistantContent = '';
+    let assistantReasoning = '';
+    let reasoningStartTime: number | null = null;
+    let reasoningEndTime: number | null = null;
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || '';
+
+      for (const line of lines) {
+        if (!line.startsWith('data: ') || line.trim() === 'data: [DONE]') continue;
+
+        const jsonStr = line.replace('data: ', '');
+        try {
+          const data = JSON.parse(jsonStr);
+          const delta = data.choices?.[0]?.delta;
+          if (!delta) continue;
+
+          if (delta.reasoning_content && reasoningLevel !== 'instant' && reasoningLevel !== 'low') {
+            if (reasoningStartTime === null) reasoningStartTime = Date.now();
+            assistantReasoning += delta.reasoning_content;
+            setMessages(prev => {
+              const newPrev = [...prev];
+              const lastMsg = newPrev[newPrev.length - 1];
+              if (lastMsg.role === 'assistant') lastMsg.reasoning_content = assistantReasoning;
+              return newPrev;
+            });
+          }
+
+          if (delta.content) {
+            if (reasoningStartTime !== null && reasoningEndTime === null) {
+              reasoningEndTime = Date.now();
+              setMessages(prev => {
+                const newPrev = [...prev];
+                const lastMsg = newPrev[newPrev.length - 1];
+                if (lastMsg.role === 'assistant') {
+                  lastMsg.metrics = { reasoningDurationMs: (reasoningEndTime! - reasoningStartTime!) };
+                }
+                return newPrev;
+              });
+            }
+            assistantContent += delta.content;
+            setMessages(prev => {
+              const newPrev = [...prev];
+              const lastMsg = newPrev[newPrev.length - 1];
+              if (lastMsg.role === 'assistant') lastMsg.content = assistantContent;
+              return newPrev;
+            });
+          }
+        } catch (e) { }
+      }
     }
   };
 
@@ -368,7 +318,13 @@ No inventes información si puedes buscarla.
         </div>
         <div className="flex flex-col gap-2">
           <label className="text-sm text-gray-400">Contraseña</label>
-          <input type="password" className="bg-black/20 border border-white/10 rounded-lg p-3 text-white" value={password} onChange={e => setPassword(e.target.value)} />
+          <input
+            type="password"
+            autoComplete="current-password"
+            className="bg-black/20 border border-white/10 rounded-lg p-3 text-white"
+            value={password}
+            onChange={e => setPassword(e.target.value)}
+          />
         </div>
         {error && <p className="text-red-400 text-sm text-center">{error}</p>}
         <button type="submit" className="btn-primary py-3 rounded-lg font-semibold">Entrar</button>
@@ -378,7 +334,6 @@ No inventes información si puedes buscarla.
 
   return (
     <div className="flex h-screen w-full bg-[#0f0f11] overflow-hidden">
-      {/* Unified Left Sidebar */}
       <MainSidebar
         currentThreadId={currentThreadId}
         selectedAgentId={selectedAgent?.id}
@@ -390,9 +345,7 @@ No inventes información si puedes buscarla.
         onClose={() => setIsSidebarOpen(false)}
       />
 
-      {/* Main Chat Area */}
       <div className="flex flex-col flex-1 h-full max-w-4xl mx-auto p-4 md:p-6 gap-4 px-4 md:px-12 relative">
-        {/* Mobile Header */}
         <div className="md:hidden flex items-center justify-between p-2 mb-2 glass rounded-xl">
           <button
             onClick={() => setIsSidebarOpen(true)}
@@ -403,7 +356,7 @@ No inventes información si puedes buscarla.
             </svg>
           </button>
           <h1 className="text-lg font-bold bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent">IA Chat</h1>
-          <div className="w-10"></div> {/* Spacer for symmetry */}
+          <div className="w-10"></div>
         </div>
 
         <div className="flex-1 overflow-y-auto space-y-4 pr-2 pb-4 scroll-smooth custom-scrollbar">
@@ -421,25 +374,51 @@ No inventes información si puedes buscarla.
         </div>
 
         <form onSubmit={sendMessage} className="relative mt-auto pt-2 flex flex-col gap-3">
-          {/* Reasoning Level Selector */}
-          <div className="flex items-center gap-2 self-start ml-2 text-[10px] font-bold tracking-wider uppercase text-gray-500 bg-black/40 p-1 px-2 rounded-full border border-white/5">
-            <span className="mr-1 opacity-50">Razonamiento:</span>
-            {(['instant', 'low', 'medium', 'high'] as const).map((lvl) => (
-              <button
-                key={lvl}
-                type="button"
-                onClick={() => {
-                  setReasoningLevel(lvl);
-                  localStorage.setItem('reasoningLevel', lvl);
-                }}
-                className={`px-3 py-1 rounded-full transition-all ${reasoningLevel === lvl
-                  ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20'
-                  : 'hover:text-gray-300'
-                  }`}
+          <div className="flex flex-wrap items-center gap-4 ml-2">
+            {/* Model Selector */}
+            <div className="flex items-center gap-2 text-[10px] font-bold tracking-wider uppercase text-gray-500 bg-black/40 p-1 px-2 rounded-full border border-white/5">
+              <span className="mr-1 opacity-50">Modelo:</span>
+              <select
+                value={selectedModel}
+                onChange={(e) => setSelectedModel(e.target.value)}
+                className="bg-transparent text-gray-300 outline-none cursor-pointer hover:text-white transition-colors"
               >
-                {lvl === 'instant' ? 'Instantáneo' : lvl === 'low' ? 'Bajo' : lvl === 'medium' ? 'Medio' : 'Alto'}
-              </button>
-            ))}
+                {availableModels.length > 0 ? (
+                  availableModels.map((m: any) => {
+                    const modelId = typeof m === 'object' ? (m.id || m.name) : m;
+                    const modelDisplay = typeof m === 'object' ? (m.name || m.id) : m;
+                    return (
+                      <option key={modelId} value={modelId} className="bg-[#0f0f11]">
+                        {modelDisplay}
+                      </option>
+                    );
+                  })
+                ) : (
+                  <option value="local-model" className="bg-[#0f0f11]">local-model</option>
+                )}
+              </select>
+            </div>
+
+            {/* Reasoning Level Selector */}
+            <div className="flex items-center gap-2 text-[10px] font-bold tracking-wider uppercase text-gray-500 bg-black/40 p-1 px-2 rounded-full border border-white/5">
+              <span className="mr-1 opacity-50">Razonamiento:</span>
+              {(['instant', 'low', 'medium', 'high'] as const).map((lvl) => (
+                <button
+                  key={lvl}
+                  type="button"
+                  onClick={() => {
+                    setReasoningLevel(lvl);
+                    localStorage.setItem('reasoningLevel', lvl);
+                  }}
+                  className={`px-3 py-1 rounded-full transition-all ${reasoningLevel === lvl
+                    ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20'
+                    : 'hover:text-gray-300'
+                    }`}
+                >
+                  {lvl === 'instant' ? 'Instantáneo' : lvl === 'low' ? 'Bajo' : lvl === 'medium' ? 'Medio' : 'Alto'}
+                </button>
+              ))}
+            </div>
           </div>
 
           <div className="relative w-full">

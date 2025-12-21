@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react';
-import { getThreads, deleteThread, updateThreadTitle, updateThreadAgent, getAgents, addAgent, updateAgent, deleteAgent } from '../services/db';
 import type { Thread, Agent } from '../services/db';
 
 interface MainSidebarProps {
@@ -12,6 +11,8 @@ interface MainSidebarProps {
     isOpen: boolean;
     onClose: () => void;
 }
+
+const BACKEND_URL = import.meta.env.CHAT_API_URL || 'http://localhost:3000';
 
 export function MainSidebar({
     currentThreadId,
@@ -43,10 +44,15 @@ export function MainSidebar({
     const [editThreadAgentId, setEditThreadAgentId] = useState<number | null>(null);
 
     const loadData = async () => {
-        const t = await getThreads();
-        setThreads(t);
-        const a = await getAgents();
-        setAgents(a);
+        try {
+            const tRes = await fetch(`${BACKEND_URL}/threads`);
+            if (tRes.ok) setThreads(await tRes.json());
+
+            const aRes = await fetch(`${BACKEND_URL}/agents`);
+            if (aRes.ok) setAgents(await aRes.json());
+        } catch (err) {
+            console.error("Error loading sidebar data:", err);
+        }
     };
 
     useEffect(() => {
@@ -56,11 +62,17 @@ export function MainSidebar({
     // Agent Handlers
     const handleSubmitAgent = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (editAgentId) {
-            await updateAgent(editAgentId, { name: agentName, description: agentDesc, system_prompt: systemPrompt });
-        } else {
-            await addAgent({ name: agentName, description: agentDesc, system_prompt: systemPrompt });
-        }
+        const payload = { name: agentName, description: agentDesc, system_prompt: systemPrompt };
+
+        const url = editAgentId ? `${BACKEND_URL}/agents/${editAgentId}` : `${BACKEND_URL}/agents`;
+        const method = editAgentId ? 'PUT' : 'POST';
+
+        await fetch(url, {
+            method,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+
         setAgentName(''); setAgentDesc(''); setSystemPrompt(''); setEditAgentId(null); setIsEditingAgent(false);
         await loadData();
     };
@@ -68,6 +80,13 @@ export function MainSidebar({
     const handleEditAgent = (agent: Agent) => {
         setAgentName(agent.name); setAgentDesc(agent.description); setSystemPrompt(agent.system_prompt);
         setEditAgentId(agent.id || null); setIsEditingAgent(true); setAgentsOpen(true);
+    };
+
+    const handleDeleteAgent = async (id: number) => {
+        if (confirm('¿Eliminar agente?')) {
+            await fetch(`${BACKEND_URL}/agents/${id}`, { method: 'DELETE' });
+            await loadData();
+        }
     };
 
     // Thread Handlers
@@ -80,9 +99,20 @@ export function MainSidebar({
 
     const saveThreadEdit = async () => {
         if (editingThreadId) {
-            await updateThreadTitle(editingThreadId, editThreadTitle);
-            await updateThreadAgent(editingThreadId, editThreadAgentId);
+            await fetch(`${BACKEND_URL}/threads/${editingThreadId}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ title: editThreadTitle, agent_id: editThreadAgentId })
+            });
             setEditingThreadId(null);
+            await loadData();
+        }
+    };
+
+    const handleDeleteThread = async (id: number) => {
+        if (confirm('¿Eliminar conversación?')) {
+            await fetch(`${BACKEND_URL}/threads/${id}`, { method: 'DELETE' });
+            if (currentThreadId === id) onNewThread();
             await loadData();
         }
     };
@@ -164,7 +194,7 @@ export function MainSidebar({
                                                 <p className="text-[10px] text-gray-500 mt-1">{agents.find(a => a.id === thread.agent_id)?.name || 'Sin Agente'}</p>
                                                 <div className="absolute top-3 right-2 opacity-0 group-hover:opacity-100 flex gap-1">
                                                     <button onClick={(e) => startEditingThread(thread, e)} className="p-1 text-gray-500 hover:text-white"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3.5 h-3.5"><path d="M5.433 13.917l1.262-3.155A4 4 0 017.58 9.42l6.92-6.918a2.121 2.121 0 013 3l-6.92 6.918c-.383.383-.84.685-1.343.886l-3.154 1.262a.5.5 0 01-.65-.65z" /></svg></button>
-                                                    <button onClick={async (e) => { e.stopPropagation(); if (confirm('¿Eliminar?')) { await deleteThread(thread.id!); loadData(); } }} className="p-1 text-gray-500 hover:text-red-400"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3.5 h-3.5"><path fillRule="evenodd" d="M8.75 1A2.75 2.75 0 006 3.75v.443c-.795.077-1.584.176-2.365.298a.75.75 0 10.23 1.482l.149-.022.841 10.518A2.75 2.75 0 007.596 19h4.807a2.75 2.75 0 002.742-2.53l.841-10.52.149.023a.75.75 0 00.23-1.482A41.03 41.03 0 0014 4.193V3.75A2.75 2.75 0 0011.25 1h-2.5zM10 4c.84 0 1.673.025 2.5.075V3.75c0-.69-.56-1.25-1.25-1.25h-2.5c-.69 0-1.25.56-1.25 1.25v.325C8.327 4.025 9.16 4 10 4z" clipRule="evenodd" /></svg></button>
+                                                    <button onClick={(e) => { e.stopPropagation(); handleDeleteThread(thread.id!); }} className="p-1 text-gray-500 hover:text-red-400"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3.5 h-3.5"><path fillRule="evenodd" d="M8.75 1A2.75 2.75 0 006 3.75v.443c-.795.077-1.584.176-2.365.298a.75.75 0 10.23 1.482l.149-.022.841 10.518A2.75 2.75 0 007.596 19h4.807a2.75 2.75 0 002.742-2.53l.841-10.52.149.023a.75.75 0 00.23-1.482A41.03 41.03 0 0014 4.193V3.75A2.75 2.75 0 0011.25 1h-2.5zM10 4c.84 0 1.673.025 2.5.075V3.75c0-.69-.56-1.25-1.25-1.25h-2.5c-.69 0-1.25.56-1.25 1.25v.325C8.327 4.025 9.16 4 10 4z" clipRule="evenodd" /></svg></button>
                                                 </div>
                                             </>
                                         )}
@@ -215,7 +245,7 @@ export function MainSidebar({
                                         <p className="text-[10px] text-gray-500 truncate mt-0.5">{agent.description}</p>
                                         <div className="absolute top-3 right-2 opacity-0 group-hover:opacity-100 flex gap-1">
                                             <button onClick={(e) => { e.stopPropagation(); handleEditAgent(agent); }} className="p-1 text-gray-500 hover:text-white"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3.5 h-3.5"><path d="M5.433 13.917l1.262-3.155A4 4 0 017.58 9.42l6.92-6.918a2.121 2.121 0 013 3l-6.92 6.918c-.383.383-.84.685-1.343.886l-3.154 1.262a.5.5 0 01-.65-.65z" /></svg></button>
-                                            <button onClick={async (e) => { e.stopPropagation(); if (confirm('¿Agente?')) { await deleteAgent(agent.id!); loadData(); } }} className="p-1 text-gray-500 hover:text-red-400"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3.5 h-3.5"><path fillRule="evenodd" d="M8.75 1A2.75 2.75 0 006 3.75v.443c-.795.077-1.584.176-2.365.298a.75.75 0 10.23 1.482l.149-.022.841 10.518A2.75 2.75 0 007.596 19h4.807a2.75 2.75 0 002.742-2.53l.841-10.52.149.023a.75.75 0 00.23-1.482A41.03 41.03 0 0014 4.193V3.75A2.75 2.75 0 0011.25 1h-2.5zM10 4c.84 0 1.673.025 2.5.075V3.75c0-.69-.56-1.25-1.25-1.25h-2.5c-.69 0-1.25.56-1.25 1.25v.325C8.327 4.025 9.16 4 10 4z" clipRule="evenodd" /></svg></button>
+                                            <button onClick={(e) => { e.stopPropagation(); handleDeleteAgent(agent.id!); }} className="p-1 text-gray-500 hover:text-red-400"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3.5 h-3.5"><path fillRule="evenodd" d="M8.75 1A2.75 2.75 0 006 3.75v.443c-.795.077-1.584.176-2.365.298a.75.75 0 10.23 1.482l.149-.022.841 10.518A2.75 2.75 0 007.596 19h4.807a2.75 2.75 0 002.742-2.53l.841-10.52.149.023a.75.75 0 00.23-1.482A41.03 41.03 0 0014 4.193V3.75A2.75 2.75 0 0011.25 1h-2.5zM10 4c.84 0 1.673.025 2.5.075V3.75c0-.69-.56-1.25-1.25-1.25h-2.5c-.69 0-1.25.56-1.25 1.25v.325C8.327 4.025 9.16 4 10 4z" clipRule="evenodd" /></svg></button>
                                         </div>
                                     </div>
                                 ))}
