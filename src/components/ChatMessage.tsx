@@ -79,9 +79,9 @@ export const ChatMessage = ({ message, isLoading, isLast }: ChatMessageProps) =>
     return (
         <div className={`flex w-full ${isUser ? 'justify-end' : 'justify-start'}`}>
             <div
-                className={`max-w-[85%] md:max-w-[70%] p-4 rounded-2xl backdrop-blur-sm ${isUser
-                    ? 'bg-blue-600/20 border border-blue-500/30 text-white rounded-tr-none'
-                    : 'bg-white/5 border border-white/10 text-gray-100 rounded-tl-none'
+                className={`max-w-[85%] md:max-w-[70%] p-4 rounded-2xl ${isUser
+                    ? 'text-white'
+                    : 'bg-black border border-white/10 text-gray-100 rounded-tl-none'
                     }`}
             >
                 <div className="markdown-body text-sm md:text-base min-h-[1.5em] space-y-2">
