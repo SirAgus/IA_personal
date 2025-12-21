@@ -99,3 +99,48 @@ body {
   padding: 0.2em 0.4em;
   border-radius: 4px;
 }
+
+/* Loading Wave Animation */
+.loading-wave {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 24px;
+}
+
+.loading-bar {
+  width: 6px;
+  height: 6px;
+  margin: 0 2px;
+  background-color: #aaa;
+  border-radius: 50%;
+  animation: wave 1s ease-in-out infinite;
+}
+
+.loading-bar:nth-child(1) {
+  animation-delay: 0s;
+}
+
+.loading-bar:nth-child(2) {
+  animation-delay: 0.1s;
+}
+
+.loading-bar:nth-child(3) {
+  animation-delay: 0.2s;
+}
+
+.loading-bar:nth-child(4) {
+  animation-delay: 0.3s;
+}
+
+@keyframes wave {
+
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+
+  50% {
+    transform: translateY(-6px);
+  }
+}
