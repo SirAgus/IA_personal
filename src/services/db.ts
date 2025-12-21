@@ -1,4 +1,4 @@
-import initSqlJs, { Database } from 'sql.js';
+import initSqlJs, { type Database } from 'sql.js';
 import localforage from 'localforage';
 
 let dbInstance: Database | null = null;
