@@ -205,7 +205,7 @@ function App() {
   const handleSelectAgent = async (agent: Agent | null) => {
     setSelectedAgent(agent);
     if (currentThreadId && token) {
-      await fetch(`${BACKEND_URL}/threads/${currentThreadId}/agent`, {
+      await fetch(`${BACKEND_URL}/threads/${currentThreadId}`, {
         method: 'PATCH',
         headers: { 
           'Content-Type': 'application/json',
@@ -252,9 +252,14 @@ function App() {
           targetThreadId = data.id;
           isCreatingThread.current = true; // Mark as internal creation
           setCurrentThreadId(targetThreadId);
+        } else {
+          const errorData = await res.json();
+          throw new Error(errorData.error || 'No se pudo crear el hilo de conversación');
         }
-      } catch (err) {
+      } catch (err: any) {
         console.error("Error creating thread:", err);
+        setMessages(prev => [...prev, { role: 'assistant', content: `Error: ${err.message}` }]);
+        return;
       }
     }
 
@@ -290,8 +295,8 @@ function App() {
       headers,
       body: JSON.stringify({
         messages: contextMessages,
-        thread_id: threadId,
-        agent_id: agent?.id,
+        ...(threadId ? { thread_id: threadId } : {}),
+        ...(agent?.id ? { agent_id: agent.id } : {}),
         model: selectedModel,
         options: {
           reasoning: reasoningLevel
