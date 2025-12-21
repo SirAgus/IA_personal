@@ -244,7 +244,7 @@ function App() {
           const delta = data.choices?.[0]?.delta;
           if (!delta) continue;
 
-          if (delta.reasoning_content && reasoningLevel !== 'instant' && reasoningLevel !== 'low') {
+          if (delta.reasoning_content && reasoningLevel !== 'instant') {
             if (reasoningStartTime === null) reasoningStartTime = Date.now();
             assistantReasoning += delta.reasoning_content;
             setMessages(prev => {
