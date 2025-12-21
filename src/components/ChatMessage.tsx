@@ -105,7 +105,7 @@ export const ChatMessage = ({ message, isLoading, isLast }: ChatMessageProps) =>
                                             </>
                                         ) : (
                                             <span className="text-gray-500">
-                                                Thinking for {formatDuration(part.durationMs!)}
+                                                Respondió en {formatDuration(part.durationMs!)}
                                             </span>
                                         )}
                                     </div>
@@ -139,6 +139,13 @@ export const ChatMessage = ({ message, isLoading, isLast }: ChatMessageProps) =>
                     ) : (
                         <div className="whitespace-pre-wrap">
                             <ReactMarkdown>{message.content}</ReactMarkdown>
+                        </div>
+                    )}
+
+                    {/* Response Time - Always show for assistant messages */}
+                    {message.role === 'assistant' && message.metrics?.reasoningDurationMs && (
+                        <div className="mt-2 text-[10px] text-gray-500 font-mono border-t border-white/5 pt-1">
+                            Respondió en {formatDuration(message.metrics.reasoningDurationMs)}
                         </div>
                     )}
                 </div>

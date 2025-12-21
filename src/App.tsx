@@ -202,6 +202,8 @@ function App() {
 
     setMessages(prev => [...prev, { role: 'assistant', content: '', reasoning_content: '' }]);
 
+    const startTime = Date.now(); // Tiempo total de respuesta
+
     const response = await fetch(`${BACKEND_URL}/chat`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -258,26 +260,34 @@ function App() {
           if (delta.content) {
             if (reasoningStartTime !== null && reasoningEndTime === null) {
               reasoningEndTime = Date.now();
-              setMessages(prev => {
-                const newPrev = [...prev];
-                const lastMsg = newPrev[newPrev.length - 1];
-                if (lastMsg.role === 'assistant') {
-                  lastMsg.metrics = { reasoningDurationMs: (reasoningEndTime! - reasoningStartTime!) };
-                }
-                return newPrev;
-              });
             }
             assistantContent += delta.content;
             setMessages(prev => {
               const newPrev = [...prev];
               const lastMsg = newPrev[newPrev.length - 1];
-              if (lastMsg.role === 'assistant') lastMsg.content = assistantContent;
+              if (lastMsg.role === 'assistant') {
+                lastMsg.content = assistantContent;
+                // Solo asignar tiempo si no hay reasoning (modo instantáneo)
+                if (!lastMsg.reasoning_content) {
+                  lastMsg.metrics = { reasoningDurationMs: Date.now() - startTime };
+                }
+              }
               return newPrev;
             });
           }
         } catch (e) { }
       }
     }
+
+    // Al finalizar el stream, asegurar que se muestre el tiempo total solo si no hay reasoning
+    setMessages(prev => {
+      const newPrev = [...prev];
+      const lastMsg = newPrev[newPrev.length - 1];
+      if (lastMsg.role === 'assistant' && !lastMsg.metrics?.reasoningDurationMs && !lastMsg.reasoning_content) {
+        lastMsg.metrics = { reasoningDurationMs: Date.now() - startTime };
+      }
+      return newPrev;
+    });
   };
 
   // Grouped messages for rendering
