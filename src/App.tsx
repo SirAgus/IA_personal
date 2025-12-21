@@ -365,16 +365,26 @@ function App() {
               <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
             </svg>
           </button>
-          <h1 className="text-lg font-bold bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent">IA Chat</h1>
+          <h1 className="text-lg font-bold bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent">Athenas AI</h1>
           <div className="w-10"></div>
         </div>
 
         <div className="flex-1 overflow-y-auto space-y-4 pr-2 pb-4 scroll-smooth custom-scrollbar">
           {groupedMessages.length === 0 && !isLoading && (
             <div className="h-full flex flex-col items-center justify-center opacity-30 select-none">
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-24 h-24 mb-4"><path d="M4.913 2.658c2.075-.21 4.19-.308 6.33-.293 2.14-.015 4.255.083 6.33.293 1.12.114 1.913 1.046 1.904 2.158v11.516c.009 1.112-.784 2.044-1.904 2.158-1.539.155-3.097.235-4.66.239-1.563-.004-3.121-.084-4.66-.239-1.12-.114-1.913-1.046-1.904-2.158V4.816c-.009-1.112.784-2.044 1.904-2.158zM4.502 19.341c-.822.112-1.502.73-1.502 1.559V21l.003.069a.75.75 0 00.744.681h16.506a.75.75 0 00.744-.681l.003-.069v-.1c0-.83-.681-1.447-1.503-1.559-1.517-.208-3.085-.314-4.688-.317-1.603.003-3.171.109-4.688.317a60.709 60.709 0 00-4.688.317z" /></svg>
-              <div className="text-2xl font-bold">¿En qué puedo ayudarte hoy?</div>
-              <div className="text-sm mt-2">Selecciona un agente o simplemente comienza a escribir.</div>
+              <div className="relative mb-6">
+                <div className="absolute -inset-4 bg-blue-500/20 blur-2xl rounded-full animate-pulse"></div>
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="w-24 h-24 text-blue-400 relative">
+                  <path d="M12 8V4H8" />
+                  <rect width="16" height="12" x="4" y="8" rx="2" />
+                  <path d="M2 14h2" />
+                  <path d="M20 14h2" />
+                  <path d="M15 13v2" />
+                  <path d="M9 13v2" />
+                </svg>
+              </div>
+              <div className="text-2xl font-bold bg-gradient-to-r from-gray-100 to-gray-400 bg-clip-text text-transparent">¿En qué puedo ayudarte hoy?</div>
+              <div className="text-sm mt-2 text-gray-400">Selecciona un agente o simplemente comienza a escribir.</div>
             </div>
           )}
           {groupedMessages.map((m, idx) => (
