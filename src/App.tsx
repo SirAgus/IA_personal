@@ -413,7 +413,7 @@ function App() {
   }, [messages]);
 
   return (
-    <div className="flex h-screen w-full bg-white dark:bg-[#0f0f11] text-gray-900 dark:text-gray-100 transition-colors duration-500 overflow-hidden">
+    <div className="flex h-full w-full bg-white dark:bg-[#0f0f11] text-gray-900 dark:text-gray-100 transition-colors duration-500 overflow-hidden">
       {/* Auth Overlays */}
       {authMode && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in p-4">
@@ -518,8 +518,9 @@ function App() {
         refreshTrigger={refreshSidebar}
       />
 
-      <div className="flex flex-col flex-1 h-full max-w-4xl mx-auto p-4 md:p-6 gap-4 px-4 md:px-12 relative animate-fade-in">
-        <div className="md:hidden flex items-center justify-between p-2 mb-2 glass rounded-xl">
+      <div className="flex flex-col flex-1 h-full max-w-4xl mx-auto p-4 md:p-6 gap-2 md:gap-4 px-4 md:px-12 relative animate-fade-in overflow-hidden">
+        {/* Mobile Header - Fixed at top */}
+        <div className="md:hidden flex-shrink-0 flex items-center justify-between p-2 mb-2 glass rounded-xl z-10">
           <button
             onClick={() => setIsSidebarOpen(true)}
             className="p-2 text-gray-500 dark:text-gray-400 hover:text-blue-500 transition-colors"
@@ -545,12 +546,13 @@ function App() {
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto space-y-6 pr-2 pb-4 scroll-smooth custom-scrollbar">
+        {/* Chat Messages Area */}
+        <div className="flex-1 overflow-y-auto space-y-6 pr-2 pb-4 scroll-smooth custom-scrollbar relative">
           {groupedMessages.length === 0 && !isLoading && (
-            <div className="h-full flex flex-col items-center justify-center select-none animate-slide-up">
-              <div className="relative mb-8 group">
+            <div className="absolute inset-0 flex flex-col items-center justify-center select-none animate-slide-up p-4">
+              <div className="relative mb-6 group">
                 <div className="absolute -inset-8 bg-blue-500/10 dark:bg-blue-500/20 blur-3xl rounded-full group-hover:bg-blue-500/30 transition-all duration-700"></div>
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="w-28 h-28 text-blue-600 dark:text-blue-400 relative drop-shadow-2xl transition-transform duration-500 group-hover:scale-110">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="w-24 h-24 md:w-28 md:h-28 text-blue-600 dark:text-blue-400 relative drop-shadow-2xl transition-transform duration-500 group-hover:scale-110">
                   <path d="M12 8V4H8" />
                   <rect width="16" height="12" x="4" y="8" rx="2" />
                   <path d="M2 14h2" />
@@ -559,17 +561,21 @@ function App() {
                   <path d="M9 13v2" />
                 </svg>
               </div>
-              <div className="text-3xl font-extrabold text-center bg-gradient-to-r from-gray-800 to-gray-400 dark:from-gray-100 dark:to-gray-500 bg-clip-text text-transparent">¿En qué puedo ayudarte hoy?</div>
-              <div className="text-base mt-3 text-gray-500 dark:text-gray-400 font-medium tracking-wide">Selecciona un agente o simplemente comienza a escribir.</div>
+              <div className="text-2xl md:text-3xl font-extrabold text-center bg-gradient-to-r from-gray-800 to-gray-400 dark:from-gray-100 dark:to-gray-500 bg-clip-text text-transparent px-4">¿En qué puedo ayudarte hoy?</div>
+              <div className="text-sm md:text-base mt-3 text-gray-500 dark:text-gray-400 font-medium tracking-wide text-center">Selecciona un agente o simplemente comienza a escribir.</div>
             </div>
           )}
-          {groupedMessages.map((m, idx) => (
-            <ChatMessage key={idx} message={m} isLoading={isLoading} isLast={idx === groupedMessages.length - 1} />
-          ))}
+          
+          <div className="space-y-6">
+            {groupedMessages.map((m, idx) => (
+              <ChatMessage key={idx} message={m} isLoading={isLoading} isLast={idx === groupedMessages.length - 1} />
+            ))}
+          </div>
           <div ref={messagesEndRef} />
         </div>
 
-        <form onSubmit={sendMessage} className="relative mt-auto pt-2 flex flex-col gap-3 animate-slide-up">
+        {/* Input Footer - Fixed at bottom */}
+        <form onSubmit={sendMessage} className="flex-shrink-0 relative mt-auto pt-2 flex flex-col gap-3 animate-slide-up z-10">
           <div className="flex flex-wrap items-center gap-3 ml-1">
             {/* Model Selector */}
             <div className="flex items-center gap-2 text-[10px] font-bold tracking-widest uppercase text-gray-500 dark:text-gray-400 bg-black/5 dark:bg-black/40 p-1.5 px-3 rounded-full border border-black/5 dark:border-white/5 hover:border-blue-500/30 transition-all cursor-pointer group shadow-sm">
