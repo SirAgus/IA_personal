@@ -32,6 +32,7 @@ function App() {
 
   const [currentThreadId, setCurrentThreadId] = useState<number | null>(null);
   const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   useEffect(() => {
     const storedAuth = localStorage.getItem('isAuthenticated');
@@ -102,6 +103,7 @@ function App() {
 
   const handleSelectThread = (id: number) => {
     setCurrentThreadId(id);
+    setIsSidebarOpen(false); // Close sidebar on mobile after selection
   };
 
   const handleNewThread = () => {
@@ -369,13 +371,29 @@ No inventes información si puedes buscarla.
         currentThreadId={currentThreadId}
         selectedAgentId={selectedAgent?.id}
         onSelectThread={handleSelectThread}
-        onNewThread={handleNewThread}
-        onSelectAgent={handleSelectAgent}
+        onNewThread={() => { handleNewThread(); setIsSidebarOpen(false); }}
+        onSelectAgent={(agent) => { handleSelectAgent(agent); setIsSidebarOpen(false); }}
         onLogout={handleLogout}
+        isOpen={isSidebarOpen}
+        onClose={() => setIsSidebarOpen(false)}
       />
 
       {/* Main Chat Area */}
-      <div className="flex flex-col flex-1 h-full max-w-4xl mx-auto p-4 md:p-6 gap-4 px-6 md:px-12 relative">
+      <div className="flex flex-col flex-1 h-full max-w-4xl mx-auto p-4 md:p-6 gap-4 px-4 md:px-12 relative">
+        {/* Mobile Header */}
+        <div className="md:hidden flex items-center justify-between p-2 mb-2 glass rounded-xl">
+          <button
+            onClick={() => setIsSidebarOpen(true)}
+            className="p-2 text-gray-400 hover:text-white transition-colors"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
+            </svg>
+          </button>
+          <h1 className="text-lg font-bold bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent">IA Chat</h1>
+          <div className="w-10"></div> {/* Spacer for symmetry */}
+        </div>
+
         <div className="flex-1 overflow-y-auto space-y-4 pr-2 pb-4 scroll-smooth custom-scrollbar">
           {groupedMessages.length === 0 && !isLoading && (
             <div className="h-full flex flex-col items-center justify-center opacity-30 select-none">

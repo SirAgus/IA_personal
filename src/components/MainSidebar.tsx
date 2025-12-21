@@ -9,6 +9,8 @@ interface MainSidebarProps {
     onNewThread: () => void;
     onSelectAgent: (agent: Agent | null) => void;
     onLogout: () => void;
+    isOpen: boolean;
+    onClose: () => void;
 }
 
 export function MainSidebar({
@@ -17,7 +19,9 @@ export function MainSidebar({
     onSelectThread,
     onNewThread,
     onSelectAgent,
-    onLogout
+    onLogout,
+    isOpen,
+    onClose
 }: MainSidebarProps) {
     const [threads, setThreads] = useState<Thread[]>([]);
     const [agents, setAgents] = useState<Agent[]>([]);
@@ -84,148 +88,163 @@ export function MainSidebar({
     };
 
     return (
-        <div className="flex flex-col h-full bg-[#0f0f11] border-r border-white/10 w-64 md:w-72 overflow-hidden transition-all">
-            {/* Header */}
-            <div className="p-4 border-b border-white/5 flex items-center justify-between">
-                <h1 className="text-xl font-bold bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent">IA Chat</h1>
-                <button onClick={onLogout} className="p-2 text-gray-500 hover:text-white transition-colors">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
-                </button>
-            </div>
+        <>
+            {/* Mobile Overlay */}
+            {isOpen && (
+                <div
+                    className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 md:hidden"
+                    onClick={onClose}
+                />
+            )}
 
-            <div className="flex-1 overflow-y-auto custom-scrollbar">
-
-                {/* Hilos Section */}
-                <div className="border-b border-white/5">
-                    <button
-                        onClick={() => setThreadsOpen(!threadsOpen)}
-                        className="w-full flex items-center justify-between p-4 hover:bg-white/5 transition-colors group"
-                    >
-                        <div className="flex items-center gap-2">
-                            <span className="text-sm font-semibold text-gray-300">Hilos</span>
-                            <span className="bg-white/10 text-[10px] px-1.5 rounded-full text-gray-400">{threads.length}</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                            <div
-                                onClick={(e) => { e.stopPropagation(); onNewThread(); }}
-                                className="p-1 hover:bg-white/10 rounded opacity-0 group-hover:opacity-100 transition-opacity"
-                            >
-                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4 text-blue-400"><path d="M10.75 4.75a.75.75 0 00-1.5 0v4.5h-4.5a.75.75 0 000 1.5h4.5v4.5a.75.75 0 001.5 0v-4.5h4.5a.75.75 0 000-1.5h-4.5v-4.5z" /></svg>
-                            </div>
-                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className={`w-5 h-5 text-gray-500 transition-transform ${threadsOpen ? 'rotate-180' : ''}`}><path fillRule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clipRule="evenodd" /></svg>
-                        </div>
+            <div className={`
+                fixed inset-y-0 left-0 z-50 md:relative 
+                flex flex-col h-full bg-[#0f0f11] border-r border-white/10 
+                w-72 md:w-72 overflow-hidden transition-transform duration-300 ease-in-out
+                ${isOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
+            `}>
+                {/* Header */}
+                <div className="p-4 border-b border-white/5 flex items-center justify-between">
+                    <h1 className="text-xl font-bold bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent">IA Chat</h1>
+                    <button onClick={onLogout} className="p-2 text-gray-500 hover:text-white transition-colors">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
                     </button>
-
-                    {threadsOpen && (
-                        <div className="px-2 pb-4 space-y-1">
-                            <button
-                                onClick={onNewThread}
-                                className="w-full text-left p-2 rounded-lg text-xs font-medium text-gray-400 hover:bg-white/5 border border-dashed border-white/10 mb-2 flex items-center gap-2"
-                            >
-                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3.5 h-3.5"><path d="M10.75 4.75a.75.75 0 00-1.5 0v4.5h-4.5a.75.75 0 000 1.5h4.5v4.5a.75.75 0 001.5 0v-4.5h4.5a.75.75 0 000-1.5h-4.5v-4.5z" /></svg>
-                                Nueva Conversación
-                            </button>
-
-                            {threads.map(thread => (
-                                <div key={thread.id} onClick={() => onSelectThread(thread.id!)} className={`group relative p-3 rounded-xl border cursor-pointer transition-all ${currentThreadId === thread.id ? 'bg-blue-600/10 border-blue-500/30' : 'bg-transparent border-transparent hover:bg-white/5 hover:border-white/10'}`}>
-                                    {editingThreadId === thread.id ? (
-                                        <div className="space-y-2" onClick={e => e.stopPropagation()}>
-                                            <input className="w-full bg-black/40 border border-white/20 rounded p-1 text-xs text-white" value={editThreadTitle} onChange={e => setEditThreadTitle(e.target.value)} autoFocus />
-                                            <select className="w-full bg-black/40 border border-white/20 rounded p-1 text-xs text-white" value={editThreadAgentId || ''} onChange={e => setEditThreadAgentId(e.target.value ? Number(e.target.value) : null)}>
-                                                <option value="">Sin Agente</option>
-                                                {agents.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
-                                            </select>
-                                            <div className="flex gap-1">
-                                                <button onClick={saveThreadEdit} className="flex-1 bg-green-600/40 text-[10px] py-1 rounded">Ok</button>
-                                                <button onClick={() => setEditingThreadId(null)} className="flex-1 bg-white/10 text-[10px] py-1 rounded">X</button>
-                                            </div>
-                                        </div>
-                                    ) : (
-                                        <>
-                                            <h3 className="text-sm font-medium text-gray-200 truncate pr-14">{thread.title}</h3>
-                                            <p className="text-[10px] text-gray-500 mt-1">{agents.find(a => a.id === thread.agent_id)?.name || 'Sin Agente'}</p>
-                                            <div className="absolute top-3 right-2 opacity-0 group-hover:opacity-100 flex gap-1">
-                                                <button onClick={(e) => startEditingThread(thread, e)} className="p-1 text-gray-500 hover:text-white"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3.5 h-3.5"><path d="M5.433 13.917l1.262-3.155A4 4 0 017.58 9.42l6.92-6.918a2.121 2.121 0 013 3l-6.92 6.918c-.383.383-.84.685-1.343.886l-3.154 1.262a.5.5 0 01-.65-.65z" /></svg></button>
-                                                <button onClick={async (e) => { e.stopPropagation(); if (confirm('¿Eliminar?')) { await deleteThread(thread.id!); loadData(); } }} className="p-1 text-gray-500 hover:text-red-400"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3.5 h-3.5"><path fillRule="evenodd" d="M8.75 1A2.75 2.75 0 006 3.75v.443c-.795.077-1.584.176-2.365.298a.75.75 0 10.23 1.482l.149-.022.841 10.518A2.75 2.75 0 007.596 19h4.807a2.75 2.75 0 002.742-2.53l.841-10.52.149.023a.75.75 0 00.23-1.482A41.03 41.03 0 0014 4.193V3.75A2.75 2.75 0 0011.25 1h-2.5zM10 4c.84 0 1.673.025 2.5.075V3.75c0-.69-.56-1.25-1.25-1.25h-2.5c-.69 0-1.25.56-1.25 1.25v.325C8.327 4.025 9.16 4 10 4z" clipRule="evenodd" /></svg></button>
-                                            </div>
-                                        </>
-                                    )}
-                                </div>
-                            ))}
-                        </div>
-                    )}
                 </div>
 
-                {/* Agentes Section */}
-                <div>
-                    <button
-                        onClick={() => setAgentsOpen(!agentsOpen)}
-                        className="w-full flex items-center justify-between p-4 hover:bg-white/5 transition-colors group"
-                    >
-                        <div className="flex items-center gap-2">
-                            <span className="text-sm font-semibold text-gray-300">Agentes</span>
-                            <span className="bg-white/10 text-[10px] px-1.5 rounded-full text-gray-400">{agents.length}</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                            <div
-                                onClick={(e) => { e.stopPropagation(); setIsEditingAgent(true); setAgentsOpen(true); }}
-                                className="p-1 hover:bg-white/10 rounded opacity-0 group-hover:opacity-100 transition-opacity"
-                            >
-                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4 text-purple-400"><path d="M10.75 4.75a.75.75 0 00-1.5 0v4.5h-4.5a.75.75 0 000 1.5h4.5v4.5a.75.75 0 001.5 0v-4.5h4.5a.75.75 0 000-1.5h-4.5v-4.5z" /></svg>
-                            </div>
-                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className={`w-5 h-5 text-gray-500 transition-transform ${agentsOpen ? 'rotate-180' : ''}`}><path fillRule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clipRule="evenodd" /></svg>
-                        </div>
-                    </button>
+                <div className="flex-1 overflow-y-auto custom-scrollbar">
 
-                    {agentsOpen && (
-                        <div className="px-2 pb-4 space-y-1">
-                            <div
-                                onClick={() => onSelectAgent(null)}
-                                className={`p-3 rounded-xl border cursor-pointer transition-all ${!selectedAgentId ? 'bg-purple-600/10 border-purple-500/30' : 'bg-transparent border-transparent hover:bg-white/5 hover:border-white/10'}`}
-                            >
-                                <h3 className="text-sm font-medium text-gray-200">Asistente General</h3>
-                                <p className="text-[10px] text-gray-500 mt-0.5">Sin instrucciones específicas</p>
+                    {/* Hilos Section */}
+                    <div className="border-b border-white/5">
+                        <button
+                            onClick={() => setThreadsOpen(!threadsOpen)}
+                            className="w-full flex items-center justify-between p-4 hover:bg-white/5 transition-colors group"
+                        >
+                            <div className="flex items-center gap-2">
+                                <span className="text-sm font-semibold text-gray-300">Hilos</span>
+                                <span className="bg-white/10 text-[10px] px-1.5 rounded-full text-gray-400">{threads.length}</span>
                             </div>
-
-                            {agents.map(agent => (
+                            <div className="flex items-center gap-2">
                                 <div
-                                    key={agent.id}
-                                    onClick={() => onSelectAgent(agent)}
-                                    className={`group relative p-3 rounded-xl border cursor-pointer transition-all ${selectedAgentId === agent.id ? 'bg-purple-600/10 border-purple-500/30' : 'bg-transparent border-transparent hover:bg-white/5 hover:border-white/10'}`}
+                                    onClick={(e) => { e.stopPropagation(); onNewThread(); }}
+                                    className="p-1 hover:bg-white/10 rounded opacity-0 group-hover:opacity-100 transition-opacity"
                                 >
-                                    <h3 className="text-sm font-medium text-gray-200 truncate pr-14">{agent.name}</h3>
-                                    <p className="text-[10px] text-gray-500 truncate mt-0.5">{agent.description}</p>
-                                    <div className="absolute top-3 right-2 opacity-0 group-hover:opacity-100 flex gap-1">
-                                        <button onClick={(e) => { e.stopPropagation(); handleEditAgent(agent); }} className="p-1 text-gray-500 hover:text-white"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3.5 h-3.5"><path d="M5.433 13.917l1.262-3.155A4 4 0 017.58 9.42l6.92-6.918a2.121 2.121 0 013 3l-6.92 6.918c-.383.383-.84.685-1.343.886l-3.154 1.262a.5.5 0 01-.65-.65z" /></svg></button>
-                                        <button onClick={async (e) => { e.stopPropagation(); if (confirm('¿Agente?')) { await deleteAgent(agent.id!); loadData(); } }} className="p-1 text-gray-500 hover:text-red-400"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3.5 h-3.5"><path fillRule="evenodd" d="M8.75 1A2.75 2.75 0 006 3.75v.443c-.795.077-1.584.176-2.365.298a.75.75 0 10.23 1.482l.149-.022.841 10.518A2.75 2.75 0 007.596 19h4.807a2.75 2.75 0 002.742-2.53l.841-10.52.149.023a.75.75 0 00.23-1.482A41.03 41.03 0 0014 4.193V3.75A2.75 2.75 0 0011.25 1h-2.5zM10 4c.84 0 1.673.025 2.5.075V3.75c0-.69-.56-1.25-1.25-1.25h-2.5c-.69 0-1.25.56-1.25 1.25v.325C8.327 4.025 9.16 4 10 4z" clipRule="evenodd" /></svg></button>
-                                    </div>
+                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4 text-blue-400"><path d="M10.75 4.75a.75.75 0 00-1.5 0v4.5h-4.5a.75.75 0 000 1.5h4.5v4.5a.75.75 0 001.5 0v-4.5h4.5a.75.75 0 000-1.5h-4.5v-4.5z" /></svg>
                                 </div>
-                            ))}
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className={`w-5 h-5 text-gray-500 transition-transform ${threadsOpen ? 'rotate-180' : ''}`}><path fillRule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clipRule="evenodd" /></svg>
+                            </div>
+                        </button>
 
-                            {isEditingAgent && (
-                                <form onSubmit={handleSubmitAgent} className="p-3 bg-black/40 border border-white/10 rounded-xl space-y-3 mt-4">
-                                    <input type="text" placeholder="Nombre" className="w-full bg-white/5 border border-white/10 rounded-lg p-2 text-xs text-white" value={agentName} onChange={e => setAgentName(e.target.value)} required />
-                                    <input type="text" placeholder="Descripción" className="w-full bg-white/5 border border-white/10 rounded-lg p-2 text-xs text-white" value={agentDesc} onChange={e => setAgentDesc(e.target.value)} />
-                                    <textarea placeholder="Prompt" className="w-full bg-white/5 border border-white/10 rounded-lg p-2 text-xs text-white min-h-[80px]" value={systemPrompt} onChange={e => setSystemPrompt(e.target.value)} required />
-                                    <div className="flex gap-2">
-                                        <button type="submit" className="flex-1 bg-purple-600 hover:bg-purple-500 text-white py-1.5 rounded-lg text-[10px] font-bold">Guardar</button>
-                                        <button type="button" onClick={() => setIsEditingAgent(false)} className="flex-1 bg-white/5 hover:bg-white/10 text-white py-1.5 rounded-lg text-[10px] font-bold">Cancelar</button>
+                        {threadsOpen && (
+                            <div className="px-2 pb-4 space-y-1">
+                                <button
+                                    onClick={onNewThread}
+                                    className="w-full text-left p-2 rounded-lg text-xs font-medium text-gray-400 hover:bg-white/5 border border-dashed border-white/10 mb-2 flex items-center gap-2"
+                                >
+                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3.5 h-3.5"><path d="M10.75 4.75a.75.75 0 00-1.5 0v4.5h-4.5a.75.75 0 000 1.5h4.5v4.5a.75.75 0 001.5 0v-4.5h4.5a.75.75 0 000-1.5h-4.5v-4.5z" /></svg>
+                                    Nueva Conversación
+                                </button>
+
+                                {threads.map(thread => (
+                                    <div key={thread.id} onClick={() => onSelectThread(thread.id!)} className={`group relative p-3 rounded-xl border cursor-pointer transition-all ${currentThreadId === thread.id ? 'bg-blue-600/10 border-blue-500/30' : 'bg-transparent border-transparent hover:bg-white/5 hover:border-white/10'}`}>
+                                        {editingThreadId === thread.id ? (
+                                            <div className="space-y-2" onClick={e => e.stopPropagation()}>
+                                                <input className="w-full bg-black/40 border border-white/20 rounded p-1 text-xs text-white" value={editThreadTitle} onChange={e => setEditThreadTitle(e.target.value)} autoFocus />
+                                                <select className="w-full bg-black/40 border border-white/20 rounded p-1 text-xs text-white" value={editThreadAgentId || ''} onChange={e => setEditThreadAgentId(e.target.value ? Number(e.target.value) : null)}>
+                                                    <option value="">Sin Agente</option>
+                                                    {agents.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                                                </select>
+                                                <div className="flex gap-1">
+                                                    <button onClick={saveThreadEdit} className="flex-1 bg-green-600/40 text-[10px] py-1 rounded">Ok</button>
+                                                    <button onClick={() => setEditingThreadId(null)} className="flex-1 bg-white/10 text-[10px] py-1 rounded">X</button>
+                                                </div>
+                                            </div>
+                                        ) : (
+                                            <>
+                                                <h3 className="text-sm font-medium text-gray-200 truncate pr-14">{thread.title}</h3>
+                                                <p className="text-[10px] text-gray-500 mt-1">{agents.find(a => a.id === thread.agent_id)?.name || 'Sin Agente'}</p>
+                                                <div className="absolute top-3 right-2 opacity-0 group-hover:opacity-100 flex gap-1">
+                                                    <button onClick={(e) => startEditingThread(thread, e)} className="p-1 text-gray-500 hover:text-white"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3.5 h-3.5"><path d="M5.433 13.917l1.262-3.155A4 4 0 017.58 9.42l6.92-6.918a2.121 2.121 0 013 3l-6.92 6.918c-.383.383-.84.685-1.343.886l-3.154 1.262a.5.5 0 01-.65-.65z" /></svg></button>
+                                                    <button onClick={async (e) => { e.stopPropagation(); if (confirm('¿Eliminar?')) { await deleteThread(thread.id!); loadData(); } }} className="p-1 text-gray-500 hover:text-red-400"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3.5 h-3.5"><path fillRule="evenodd" d="M8.75 1A2.75 2.75 0 006 3.75v.443c-.795.077-1.584.176-2.365.298a.75.75 0 10.23 1.482l.149-.022.841 10.518A2.75 2.75 0 007.596 19h4.807a2.75 2.75 0 002.742-2.53l.841-10.52.149.023a.75.75 0 00.23-1.482A41.03 41.03 0 0014 4.193V3.75A2.75 2.75 0 0011.25 1h-2.5zM10 4c.84 0 1.673.025 2.5.075V3.75c0-.69-.56-1.25-1.25-1.25h-2.5c-.69 0-1.25.56-1.25 1.25v.325C8.327 4.025 9.16 4 10 4z" clipRule="evenodd" /></svg></button>
+                                                </div>
+                                            </>
+                                        )}
                                     </div>
-                                </form>
-                            )}
-                        </div>
-                    )}
-                </div>
-            </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
 
-            {/* User Footer */}
-            <div className="p-4 bg-black/20 border-t border-white/5 flex items-center gap-3">
-                <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-blue-500 to-purple-600 flex items-center justify-center text-xs font-bold text-white shadow-lg">U</div>
-                <div className="flex-1 min-w-0">
-                    <p className="text-xs font-bold text-gray-200 truncate">Usuario</p>
-                    <p className="text-[10px] text-green-500 flex items-center gap-1">Conectado</p>
+                    {/* Agentes Section */}
+                    <div>
+                        <button
+                            onClick={() => setAgentsOpen(!agentsOpen)}
+                            className="w-full flex items-center justify-between p-4 hover:bg-white/5 transition-colors group"
+                        >
+                            <div className="flex items-center gap-2">
+                                <span className="text-sm font-semibold text-gray-300">Agentes</span>
+                                <span className="bg-white/10 text-[10px] px-1.5 rounded-full text-gray-400">{agents.length}</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <div
+                                    onClick={(e) => { e.stopPropagation(); setIsEditingAgent(true); setAgentsOpen(true); }}
+                                    className="p-1 hover:bg-white/10 rounded opacity-0 group-hover:opacity-100 transition-opacity"
+                                >
+                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4 text-purple-400"><path d="M10.75 4.75a.75.75 0 00-1.5 0v4.5h-4.5a.75.75 0 000 1.5h4.5v4.5a.75.75 0 001.5 0v-4.5h4.5a.75.75 0 000-1.5h-4.5v-4.5z" /></svg>
+                                </div>
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className={`w-5 h-5 text-gray-500 transition-transform ${agentsOpen ? 'rotate-180' : ''}`}><path fillRule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clipRule="evenodd" /></svg>
+                            </div>
+                        </button>
+
+                        {agentsOpen && (
+                            <div className="px-2 pb-4 space-y-1">
+                                <div
+                                    onClick={() => onSelectAgent(null)}
+                                    className={`p-3 rounded-xl border cursor-pointer transition-all ${!selectedAgentId ? 'bg-purple-600/10 border-purple-500/30' : 'bg-transparent border-transparent hover:bg-white/5 hover:border-white/10'}`}
+                                >
+                                    <h3 className="text-sm font-medium text-gray-200">Asistente General</h3>
+                                    <p className="text-[10px] text-gray-500 mt-0.5">Sin instrucciones específicas</p>
+                                </div>
+
+                                {agents.map(agent => (
+                                    <div
+                                        key={agent.id}
+                                        onClick={() => onSelectAgent(agent)}
+                                        className={`group relative p-3 rounded-xl border cursor-pointer transition-all ${selectedAgentId === agent.id ? 'bg-purple-600/10 border-purple-500/30' : 'bg-transparent border-transparent hover:bg-white/5 hover:border-white/10'}`}
+                                    >
+                                        <h3 className="text-sm font-medium text-gray-200 truncate pr-14">{agent.name}</h3>
+                                        <p className="text-[10px] text-gray-500 truncate mt-0.5">{agent.description}</p>
+                                        <div className="absolute top-3 right-2 opacity-0 group-hover:opacity-100 flex gap-1">
+                                            <button onClick={(e) => { e.stopPropagation(); handleEditAgent(agent); }} className="p-1 text-gray-500 hover:text-white"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3.5 h-3.5"><path d="M5.433 13.917l1.262-3.155A4 4 0 017.58 9.42l6.92-6.918a2.121 2.121 0 013 3l-6.92 6.918c-.383.383-.84.685-1.343.886l-3.154 1.262a.5.5 0 01-.65-.65z" /></svg></button>
+                                            <button onClick={async (e) => { e.stopPropagation(); if (confirm('¿Agente?')) { await deleteAgent(agent.id!); loadData(); } }} className="p-1 text-gray-500 hover:text-red-400"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3.5 h-3.5"><path fillRule="evenodd" d="M8.75 1A2.75 2.75 0 006 3.75v.443c-.795.077-1.584.176-2.365.298a.75.75 0 10.23 1.482l.149-.022.841 10.518A2.75 2.75 0 007.596 19h4.807a2.75 2.75 0 002.742-2.53l.841-10.52.149.023a.75.75 0 00.23-1.482A41.03 41.03 0 0014 4.193V3.75A2.75 2.75 0 0011.25 1h-2.5zM10 4c.84 0 1.673.025 2.5.075V3.75c0-.69-.56-1.25-1.25-1.25h-2.5c-.69 0-1.25.56-1.25 1.25v.325C8.327 4.025 9.16 4 10 4z" clipRule="evenodd" /></svg></button>
+                                        </div>
+                                    </div>
+                                ))}
+
+                                {isEditingAgent && (
+                                    <form onSubmit={handleSubmitAgent} className="p-3 bg-black/40 border border-white/10 rounded-xl space-y-3 mt-4">
+                                        <input type="text" placeholder="Nombre" className="w-full bg-white/5 border border-white/10 rounded-lg p-2 text-xs text-white" value={agentName} onChange={e => setAgentName(e.target.value)} required />
+                                        <input type="text" placeholder="Descripción" className="w-full bg-white/5 border border-white/10 rounded-lg p-2 text-xs text-white" value={agentDesc} onChange={e => setAgentDesc(e.target.value)} />
+                                        <textarea placeholder="Prompt" className="w-full bg-white/5 border border-white/10 rounded-lg p-2 text-xs text-white min-h-[80px]" value={systemPrompt} onChange={e => setSystemPrompt(e.target.value)} required />
+                                        <div className="flex gap-2">
+                                            <button type="submit" className="flex-1 bg-purple-600 hover:bg-purple-500 text-white py-1.5 rounded-lg text-[10px] font-bold">Guardar</button>
+                                            <button type="button" onClick={() => setIsEditingAgent(false)} className="flex-1 bg-white/5 hover:bg-white/10 text-white py-1.5 rounded-lg text-[10px] font-bold">Cancelar</button>
+                                        </div>
+                                    </form>
+                                )}
+                            </div>
+                        )}
+                    </div>
+                </div>
+
+                {/* User Footer */}
+                <div className="p-4 bg-black/20 border-t border-white/5 flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-blue-500 to-purple-600 flex items-center justify-center text-xs font-bold text-white shadow-lg">U</div>
+                    <div className="flex-1 min-w-0">
+                        <p className="text-xs font-bold text-gray-200 truncate">Usuario</p>
+                        <p className="text-[10px] text-green-500 flex items-center gap-1">Conectado</p>
+                    </div>
                 </div>
             </div>
-        </div>
+        </>
     );
 }
