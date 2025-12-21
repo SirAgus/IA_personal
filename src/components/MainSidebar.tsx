@@ -165,7 +165,7 @@ export function MainSidebar({
                 flex flex-col h-full bg-gray-50 dark:bg-[#0f0f11] border-r border-black/5 dark:border-white/10 
                 w-72 md:w-72 overflow-hidden transition-all duration-300 ease-in-out
                 ${isOpen ? 'translate-x-0 shadow-2xl' : '-translate-x-full md:translate-x-0'}
-            `}>
+            `} style={{ paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)' }}>
                 {/* Header */}
                 <div className="p-5 border-b border-black/5 dark:border-white/5 flex items-center justify-between">
                     <h1 className="text-xl font-black bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent font-mono tracking-tighter">Athenas AI</h1>

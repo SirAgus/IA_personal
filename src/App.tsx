@@ -518,7 +518,7 @@ function App() {
         refreshTrigger={refreshSidebar}
       />
 
-      <div className="flex flex-col flex-1 h-full max-w-4xl mx-auto p-4 md:p-6 gap-2 md:gap-4 px-4 md:px-12 relative animate-fade-in overflow-hidden">
+      <div className="flex flex-col flex-1 h-full max-w-4xl mx-auto p-4 md:p-6 gap-2 md:gap-4 px-4 md:px-12 relative animate-fade-in overflow-hidden" style={{ paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)' }}>
         {/* Mobile Header - Fixed at top */}
         <div className="md:hidden flex-shrink-0 flex items-center justify-between p-2 mb-2 glass rounded-xl z-10">
           <button
