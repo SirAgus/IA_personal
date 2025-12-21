@@ -53,6 +53,7 @@ function App() {
     if (stored === 'light' || stored === 'dark') return stored;
     return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
   });
+  const [refreshSidebar, setRefreshSidebar] = useState(0);
 
   const isCreatingThread = useRef(false);
 
@@ -272,6 +273,8 @@ function App() {
 
     try {
       await processChatInteraction(newMessages, targetThreadId, selectedAgent);
+      // Refresh sidebar to ensure new threads or updated titles are visible
+      setRefreshSidebar(prev => prev + 1);
     } catch (err: any) {
       console.error(err);
       setMessages(prev => [...prev, { role: 'assistant', content: err.message || 'Error al conectar con el servidor.' }]);
@@ -512,6 +515,7 @@ function App() {
         token={token}
         user={user}
         onOpenAuth={(mode) => setAuthMode(mode)}
+        refreshTrigger={refreshSidebar}
       />
 
       <div className="flex flex-col flex-1 h-full max-w-4xl mx-auto p-4 md:p-6 gap-4 px-4 md:px-12 relative animate-fade-in">

@@ -15,6 +15,7 @@ interface MainSidebarProps {
     token: string | null;
     user: { username: string } | null;
     onOpenAuth: (mode: 'login' | 'signup') => void;
+    refreshTrigger?: number;
 }
 
 const BACKEND_URL = import.meta.env.CHAT_API_URL || 'http://localhost:3000';
@@ -32,7 +33,8 @@ export function MainSidebar({
     onToggleTheme,
     token,
     user,
-    onOpenAuth
+    onOpenAuth,
+    refreshTrigger
 }: MainSidebarProps) {
     const [threads, setThreads] = useState<Thread[]>([]);
     const [agents, setAgents] = useState<Agent[]>([]);
@@ -74,7 +76,7 @@ export function MainSidebar({
 
     useEffect(() => {
         loadData();
-    }, [currentThreadId, selectedAgentId, token]);
+    }, [currentThreadId, selectedAgentId, token, refreshTrigger]);
 
     // Agent Handlers
     const handleSubmitAgent = async (e: React.FormEvent) => {
