@@ -33,6 +33,9 @@ function App() {
   const [currentThreadId, setCurrentThreadId] = useState<number | null>(null);
   const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [reasoningLevel, setReasoningLevel] = useState<'instant' | 'low' | 'medium' | 'high'>(() => {
+    return (localStorage.getItem('reasoningLevel') as 'instant' | 'low' | 'medium' | 'high') || 'medium';
+  });
 
   useEffect(() => {
     const storedAuth = localStorage.getItem('isAuthenticated');
@@ -163,10 +166,17 @@ No inventes información si puedes buscarla.
     `.trim();
 
     const combinedSystemPrompt = selectedAgent
-      ? `${GLOBAL_SYSTEM_PROMPT}\n\n---\n\nInstrucciones Específicas del Agente:\n${selectedAgent.system_prompt}`
-      : GLOBAL_SYSTEM_PROMPT;
+      ? `${GLOBAL_SYSTEM_PROMPT}\n\n---\n\nInstrucciones Específicas del Agente:\n${selectedAgent.system_prompt}${reasoningLevel === 'high' ? '\n\nRazona paso a paso y justifica cada decisión.' : ''}${(reasoningLevel === 'instant' || reasoningLevel === 'low') ? '\n\nIMPORTANT: Do NOT think, reason or use internal monologue. Provide a direct and concise answer immediately.' : ''}`
+      : `${GLOBAL_SYSTEM_PROMPT}${reasoningLevel === 'high' ? '\n\nRazona paso a paso y justifica cada decisión.' : ''}${(reasoningLevel === 'instant' || reasoningLevel === 'low') ? '\n\nIMPORTANT: Do NOT think, reason or use internal monologue. Provide a direct and concise answer immediately.' : ''}`;
 
     const initialSystemMessages = [{ role: 'system', content: combinedSystemPrompt }];
+
+    const maxTokensMap = {
+      instant: 64,
+      low: 128,
+      medium: 1024,
+      high: 4096
+    };
 
     while (iteration < MAX_ITERATIONS) {
       iteration++;
@@ -192,6 +202,8 @@ No inventes información si puedes buscarla.
           messages: messagesPayload,
           tools: tools,
           stream: true,
+          max_tokens: maxTokensMap[reasoningLevel],
+          reasoning: { enabled: reasoningLevel !== 'low' && reasoningLevel !== 'instant' }
         }),
       });
 
@@ -224,7 +236,7 @@ No inventes información si puedes buscarla.
             const delta = data.choices?.[0]?.delta;
             if (!delta) continue;
 
-            if (delta.reasoning_content) {
+            if (delta.reasoning_content && reasoningLevel !== 'instant' && reasoningLevel !== 'low') {
               if (reasoningStartTime === null) reasoningStartTime = Date.now();
               assistantReasoning += delta.reasoning_content;
               setMessages(prev => {
@@ -408,7 +420,28 @@ No inventes información si puedes buscarla.
           <div ref={messagesEndRef} />
         </div>
 
-        <form onSubmit={sendMessage} className="relative mt-auto pt-2">
+        <form onSubmit={sendMessage} className="relative mt-auto pt-2 flex flex-col gap-3">
+          {/* Reasoning Level Selector */}
+          <div className="flex items-center gap-2 self-start ml-2 text-[10px] font-bold tracking-wider uppercase text-gray-500 bg-black/40 p-1 px-2 rounded-full border border-white/5">
+            <span className="mr-1 opacity-50">Razonamiento:</span>
+            {(['instant', 'low', 'medium', 'high'] as const).map((lvl) => (
+              <button
+                key={lvl}
+                type="button"
+                onClick={() => {
+                  setReasoningLevel(lvl);
+                  localStorage.setItem('reasoningLevel', lvl);
+                }}
+                className={`px-3 py-1 rounded-full transition-all ${reasoningLevel === lvl
+                  ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20'
+                  : 'hover:text-gray-300'
+                  }`}
+              >
+                {lvl === 'instant' ? 'Instantáneo' : lvl === 'low' ? 'Bajo' : lvl === 'medium' ? 'Medio' : 'Alto'}
+              </button>
+            ))}
+          </div>
+
           <div className="relative w-full">
             <textarea
               ref={(el) => { if (el) { el.style.height = 'auto'; el.style.height = `${Math.min(el.scrollHeight, 120)}px`; } }}
