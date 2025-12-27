@@ -27,7 +27,7 @@ export default defineConfig({
       }
     })
   ],
-  envPrefix: ['VITE_', 'CHAT_', 'AUTH_', 'SERPAPI_'],
+  envPrefix: ['VITE_', 'CHAT_', 'AUTH_', 'SERPAPI_', 'API_KEY_'],
   server: {
     proxy: {
       '/api/serpapi': {

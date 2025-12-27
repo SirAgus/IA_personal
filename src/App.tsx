@@ -2,6 +2,8 @@ import { useState, useRef, useEffect, useMemo } from 'react';
 import { MainSidebar } from './components/MainSidebar';
 import { ChatMessage } from './components/ChatMessage';
 import { type Agent } from './services/db';
+import { streamGroqChat, type GroqMessage } from './services/groq';
+import * as localDb from './services/localSqlite';
 import './index.css';
 
 interface Message {
@@ -20,9 +22,26 @@ interface User {
   email: string;
 }
 
+const DEFAULT_GROQ_MODELS = [
+  'llama-3.1-8b-instant',
+  'llama-3.1-70b-versatile',
+  'mixtral-8x7b-32768'
+];
+const DEFAULT_V1_MODEL = 'local-model';
+const DEFAULT_V2_MODEL = DEFAULT_GROQ_MODELS[0];
+
+const getStoredModel = (mode: 'v1' | 'v2') => {
+  const key = mode === 'v2' ? 'selectedModelV2' : 'selectedModelV1';
+  const fallback = mode === 'v2' ? DEFAULT_V2_MODEL : DEFAULT_V1_MODEL;
+  return localStorage.getItem(key) || fallback;
+};
+
+const ENV_GROQ_API_KEY = (import.meta.env.API_KEY_GROQ as string | undefined) || '';
 const BACKEND_URL = import.meta.env.CHAT_API_URL || 'http://localhost:3000';
 
 function App() {
+  const initialMode = (localStorage.getItem('appMode') === 'v2' ? 'v2' : 'v1');
+  const [appMode, setAppMode] = useState<'v1' | 'v2'>(initialMode);
   const [token, setToken] = useState<string | null>(() => localStorage.getItem('token'));
   const [user, setUser] = useState<User | null>(() => {
     const saved = localStorage.getItem('user');
@@ -44,7 +63,8 @@ function App() {
   const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [availableModels, setAvailableModels] = useState<string[]>([]);
-  const [selectedModel, setSelectedModel] = useState<string>('local-model');
+  const [selectedModel, setSelectedModel] = useState<string>(() => getStoredModel(initialMode));
+  const groqApiKey = ENV_GROQ_API_KEY;
   const [reasoningLevel, setReasoningLevel] = useState<'instant' | 'low' | 'medium' | 'high'>(() => {
     return (localStorage.getItem('reasoningLevel') as 'instant' | 'low' | 'medium' | 'high') || 'medium';
   });
@@ -67,27 +87,75 @@ function App() {
   }, [theme]);
 
   useEffect(() => {
-    // Fetch available models
+    localStorage.setItem('appMode', appMode);
+  }, [appMode]);
+
+  useEffect(() => {
+    const key = appMode === 'v2' ? 'selectedModelV2' : 'selectedModelV1';
+    localStorage.setItem(key, selectedModel);
+  }, [selectedModel, appMode]);
+
+  useEffect(() => {
+    setAvailableModels([]);
+    setSelectedModel(getStoredModel(appMode));
+    setMessages([]);
+    setCurrentThreadId(null);
+    setSelectedAgent(null);
+    setIsSidebarOpen(false);
+    setIsLoading(false);
+    setAuthMode(null);
+    setError('');
+    setRefreshSidebar(prev => prev + 1);
+  }, [appMode]);
+
+  useEffect(() => {
     const fetchModels = async () => {
+      if (appMode === 'v2') {
+        if (!groqApiKey) {
+          setAvailableModels(DEFAULT_GROQ_MODELS);
+          return;
+        }
+        try {
+          const res = await fetch('https://api.groq.com/openai/v1/models', {
+            headers: { 'Authorization': `Bearer ${groqApiKey}` }
+          });
+          if (res.ok) {
+            const data = await res.json();
+            const models = (data?.data || []).map((m: any) => m.id).filter(Boolean);
+            setAvailableModels(models.length > 0 ? models : DEFAULT_GROQ_MODELS);
+            if (models.length > 0 && !models.includes(selectedModel)) {
+              setSelectedModel(models[0]);
+            }
+            return;
+          }
+        } catch (err) {
+          console.error("Error fetching Groq models:", err);
+        }
+        setAvailableModels(DEFAULT_GROQ_MODELS);
+        return;
+      }
+
       try {
         const res = await fetch(`${BACKEND_URL}/models`);
         if (res.ok) {
           const models = await res.json();
           setAvailableModels(models);
-          if (models.length > 0) setSelectedModel(models[0]);
+          if (models.length > 0 && !models.includes(selectedModel)) {
+            setSelectedModel(models[0]);
+          }
         }
       } catch (err) {
         console.error("Error fetching models:", err);
       }
     };
     fetchModels();
-  }, []);
+  }, [appMode, groqApiKey, selectedModel]);
 
   // Sync state when thread changes
   useEffect(() => {
     const loadThreadData = async () => {
-      if (!token || !currentThreadId) {
-        if (!currentThreadId) setMessages([]);
+      if (!currentThreadId) {
+        setMessages([]);
         return;
       }
 
@@ -95,6 +163,34 @@ function App() {
       // until the interaction is finished to avoid wiping the user message.
       if (isCreatingThread.current) {
         isCreatingThread.current = false;
+        return;
+      }
+
+      if (appMode === 'v2') {
+        try {
+          const localMessages = await localDb.listMessages(currentThreadId);
+          setMessages(localMessages.map((msg) => ({
+            role: msg.role,
+            content: msg.content,
+            reasoning_content: msg.reasoning_content,
+            metrics: msg.metrics
+          })));
+
+          const threadData = await localDb.getThread(currentThreadId);
+          if (threadData?.agent_id) {
+            const agentData = await localDb.getAgent(threadData.agent_id);
+            setSelectedAgent(agentData);
+          } else {
+            setSelectedAgent(null);
+          }
+        } catch (err) {
+          console.error("Error loading local thread:", err);
+        }
+        return;
+      }
+
+      if (!token) {
+        setMessages([]);
         return;
       }
 
@@ -134,7 +230,7 @@ function App() {
       }
     };
     loadThreadData();
-  }, [token, currentThreadId]);
+  }, [token, currentThreadId, appMode]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -205,15 +301,21 @@ function App() {
 
   const handleSelectAgent = async (agent: Agent | null) => {
     setSelectedAgent(agent);
-    if (currentThreadId && token) {
-      await fetch(`${BACKEND_URL}/threads/${currentThreadId}`, {
-        method: 'PATCH',
-        headers: { 
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({ agent_id: agent?.id || null })
-      });
+    if (currentThreadId) {
+      if (appMode === 'v2') {
+        await localDb.updateThread(currentThreadId, { agent_id: agent?.id || null });
+        return;
+      }
+      if (token) {
+        await fetch(`${BACKEND_URL}/threads/${currentThreadId}`, {
+          method: 'PATCH',
+          headers: { 
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({ agent_id: agent?.id || null })
+        });
+      }
     }
   };
 
@@ -233,38 +335,52 @@ function App() {
     if (!input.trim() || isLoading) return;
 
     let targetThreadId = currentThreadId;
+    const trimmedInput = input.trim();
 
-    // AUTO-CREATE THREAD IF MISSING AND AUTHENTICATED
-    if (!targetThreadId && token) {
-      const firstWords = input.trim().split(' ').slice(0, 5).join(' ');
+    // AUTO-CREATE THREAD IF MISSING
+    if (!targetThreadId) {
+      const firstWords = trimmedInput.split(' ').slice(0, 5).join(' ');
       const title = firstWords.length > 30 ? firstWords.substring(0, 30) + '...' : firstWords;
 
-      try {
-        const res = await fetch(`${BACKEND_URL}/threads`, {
-          method: 'POST',
-          headers: { 
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
-          },
-          body: JSON.stringify({ title, agent_id: selectedAgent?.id })
-        });
-        if (res.ok) {
-          const data = await res.json();
-          targetThreadId = data.id;
-          isCreatingThread.current = true; // Mark as internal creation
-          setCurrentThreadId(targetThreadId);
-        } else {
-          const errorData = await res.json();
-          throw new Error(errorData.error || 'No se pudo crear el hilo de conversación');
+      if (appMode === 'v2') {
+        try {
+          const thread = await localDb.createThread(title, selectedAgent?.id ?? null);
+          targetThreadId = thread.id || null;
+          isCreatingThread.current = true;
+          if (targetThreadId) setCurrentThreadId(targetThreadId);
+        } catch (err: any) {
+          console.error("Error creating local thread:", err);
+          setMessages(prev => [...prev, { role: 'assistant', content: `Error: ${err.message}` }]);
+          return;
         }
-      } catch (err: any) {
-        console.error("Error creating thread:", err);
-        setMessages(prev => [...prev, { role: 'assistant', content: `Error: ${err.message}` }]);
-        return;
+      } else if (token) {
+        try {
+          const res = await fetch(`${BACKEND_URL}/threads`, {
+            method: 'POST',
+            headers: { 
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({ title, agent_id: selectedAgent?.id })
+          });
+          if (res.ok) {
+            const data = await res.json();
+            targetThreadId = data.id;
+            isCreatingThread.current = true; // Mark as internal creation
+            setCurrentThreadId(targetThreadId);
+          } else {
+            const errorData = await res.json();
+            throw new Error(errorData.error || 'No se pudo crear el hilo de conversación');
+          }
+        } catch (err: any) {
+          console.error("Error creating thread:", err);
+          setMessages(prev => [...prev, { role: 'assistant', content: `Error: ${err.message}` }]);
+          return;
+        }
       }
     }
 
-    const userMessage: Message = { role: 'user', content: input };
+    const userMessage: Message = { role: 'user', content: trimmedInput };
     const newMessages = [...messages, userMessage];
     setMessages(newMessages);
 
@@ -272,7 +388,19 @@ function App() {
     setIsLoading(true);
 
     try {
-      await processChatInteraction(newMessages, targetThreadId, selectedAgent);
+      if (appMode === 'v2' && targetThreadId) {
+        await localDb.addMessage({
+          thread_id: targetThreadId,
+          role: 'user',
+          content: userMessage.content
+        });
+      }
+
+      if (appMode === 'v2') {
+        await processGroqInteraction(newMessages, targetThreadId, selectedAgent);
+      } else {
+        await processChatInteraction(newMessages, targetThreadId, selectedAgent);
+      }
       // Refresh sidebar to ensure new threads or updated titles are visible
       setRefreshSidebar(prev => prev + 1);
     } catch (err: any) {
@@ -280,6 +408,63 @@ function App() {
       setMessages(prev => [...prev, { role: 'assistant', content: err.message || 'Error al conectar con el servidor.' }]);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const processGroqInteraction = async (allMessages: Message[], threadId: number | null, agent: Agent | null) => {
+    if (!groqApiKey.trim()) {
+      throw new Error('Configura tu API key de Groq en la pestaña V2.');
+    }
+
+    const contextMessages = allMessages.slice(-10);
+    const groqMessages: GroqMessage[] = [];
+    if (agent?.system_prompt) {
+      groqMessages.push({ role: 'system' as const, content: agent.system_prompt });
+    }
+    for (const msg of contextMessages) {
+      if (msg.role === 'user' || msg.role === 'assistant' || msg.role === 'system') {
+        groqMessages.push({ role: msg.role, content: msg.content });
+      }
+    }
+
+    setMessages(prev => [...prev, { role: 'assistant', content: '' }]);
+    const startTime = Date.now();
+    let assistantContent = '';
+
+    await streamGroqChat({
+      apiKey: groqApiKey.trim(),
+      model: selectedModel,
+      messages: groqMessages,
+      onDelta: (delta) => {
+        assistantContent += delta;
+        setMessages(prev => {
+          const next = [...prev];
+          const lastMsg = next[next.length - 1];
+          if (lastMsg.role === 'assistant') {
+            lastMsg.content = assistantContent;
+          }
+          return next;
+        });
+      }
+    });
+
+    const durationMs = Date.now() - startTime;
+    setMessages(prev => {
+      const next = [...prev];
+      const lastMsg = next[next.length - 1];
+      if (lastMsg.role === 'assistant' && !lastMsg.metrics?.reasoningDurationMs) {
+        lastMsg.metrics = { reasoningDurationMs: durationMs };
+      }
+      return next;
+    });
+
+    if (threadId) {
+      await localDb.addMessage({
+        thread_id: threadId,
+        role: 'assistant',
+        content: assistantContent,
+        metrics: { reasoningDurationMs: durationMs }
+      });
     }
   };
 
@@ -516,6 +701,8 @@ function App() {
         user={user}
         onOpenAuth={(mode) => setAuthMode(mode)}
         refreshTrigger={refreshSidebar}
+        mode={appMode}
+        onModeChange={setAppMode}
       />
 
       <div className="flex flex-col flex-1 h-full max-w-4xl mx-auto p-4 md:p-6 gap-2 md:gap-4 px-4 md:px-12 relative animate-fade-in overflow-hidden" style={{ paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)' }}>
@@ -529,7 +716,7 @@ function App() {
               <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
             </svg>
           </button>
-          <h1 className="text-lg font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent font-mono tracking-tighter">Athenas AI</h1>
+          <h1 className="text-lg font-bold text-black dark:text-white font-mono tracking-tighter">Athenas AI</h1>
           <button 
             onClick={() => setTheme(t => t === 'light' ? 'dark' : 'light')}
             className="p-2 text-gray-500 dark:text-gray-400"
