@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
 interface ReasoningPart {
     content: string;
@@ -154,7 +155,7 @@ export const ChatMessage = ({ message, isLoading, isLast }: ChatMessageProps) =>
                         </div>
                     ) : (
                         <div className={`leading-relaxed ${isUser ? 'prose-invert' : ''}`}>
-                            <ReactMarkdown>{message.content}</ReactMarkdown>
+                            <ReactMarkdown remarkPlugins={[remarkGfm]}>{message.content}</ReactMarkdown>
                         </div>
                     )}
 
