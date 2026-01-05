@@ -422,12 +422,23 @@ function App() {
       currentGroqMessages.push({ role: 'system', content: agent.system_prompt });
     }
 
-    const contextMessages = allMessages.slice(-10);
+    const contextMessages = allMessages.slice(-6);
     for (const msg of contextMessages) {
       if (['user', 'assistant', 'system', 'tool'].includes(msg.role)) {
+        // Truncado para evitar errores de TPM (Limit 12k tokens)
+        let content = msg.content;
+        const MAX_LENGTH = 3000;
+        if (content.length > MAX_LENGTH) {
+          content = content.substring(0, MAX_LENGTH) + "\n\n[...Contenido truncado para optimizar tokens...]";
+        }
+
         currentGroqMessages.push({
           role: msg.role as any,
-          content: msg.content
+          content: content,
+          ...(msg.role === 'tool' ? {
+            tool_call_id: (msg as any).tool_call_id,
+            name: (msg as any).name
+          } : {})
         });
       }
     }

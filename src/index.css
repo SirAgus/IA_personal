@@ -8,22 +8,28 @@
   font-weight: 400;
   
   --bg-primary: #ffffff;
-  --bg-secondary: #f9fafb;
+  --bg-secondary: #f3f4f6;
   --text-primary: #111827;
   --text-secondary: #4b5563;
   --border-color: rgba(0, 0, 0, 0.05);
   --glass-bg: rgba(255, 255, 255, 0.7);
   --glass-border: rgba(0, 0, 0, 0.1);
+  --accent-color: #3b82f6;
+  --user-bubble-bg: linear-gradient(135deg, #2563eb 0%, #7c3aed 100%);
+  --assistant-bubble-bg: #f9fafb;
 }
 
 .dark {
-  --bg-primary: #0f0f11;
-  --bg-secondary: #161618;
-  --text-primary: #f9fafb;
+  --bg-primary: #0a0a0c;
+  --bg-secondary: #121214;
+  --text-primary: #f3f4f6;
   --text-secondary: #9ca3af;
-  --border-color: rgba(255, 255, 255, 0.05);
-  --glass-bg: rgba(255, 255, 255, 0.03);
-  --glass-border: rgba(255, 255, 255, 0.1);
+  --border-color: rgba(255, 255, 255, 0.06);
+  --glass-bg: rgba(20, 20, 25, 0.6);
+  --glass-border: rgba(255, 255, 255, 0.08);
+  --accent-color: #60a5fa;
+  --user-bubble-bg: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
+  --assistant-bubble-bg: #161618;
 }
 
 body {
@@ -99,41 +105,92 @@ body {
 .markdown-body {
   color: inherit;
   font-family: inherit;
-  line-height: 1.6;
+  line-height: 1.7;
 }
 
 .markdown-body p {
-  margin-bottom: 0.5rem;
+  margin-bottom: 0.75rem;
 }
 
 .markdown-body p:last-child {
   margin-bottom: 0;
 }
 
+.markdown-body h1, .markdown-body h2, .markdown-body h3 {
+  font-weight: 700;
+  margin-top: 1.5rem;
+  margin-bottom: 0.75rem;
+  color: var(--text-primary);
+}
+
+.markdown-body h1 { font-size: 1.5rem; }
+.markdown-body h2 { font-size: 1.25rem; }
+.markdown-body h3 { font-size: 1.125rem; }
+
+.markdown-body ul, .markdown-body ol {
+  margin-left: 1.5rem;
+  margin-bottom: 1rem;
+}
+
+.markdown-body li {
+  margin-bottom: 0.4rem;
+}
+
 .markdown-body code {
-  background: var(--border-color);
+  background: rgba(0, 0, 0, 0.05);
   padding: 0.2rem 0.4rem;
-  border-radius: 4px;
-  font-family: monospace;
-  font-size: 0.9em;
+  border-radius: 6px;
+  font-family: 'Fira Code', monospace;
+  font-size: 0.85em;
+  color: #ef4444;
+}
+
+.dark .markdown-body code {
+  background: rgba(255, 255, 255, 0.1);
+  color: #f87171;
 }
 
 .markdown-body pre {
-  background: rgba(0, 0, 0, 0.05);
-  padding: 1rem;
-  border-radius: 8px;
+  background: #1e1e2e;
+  padding: 1.25rem;
+  border-radius: 12px;
   overflow-x: auto;
-  margin: 1rem 0;
-  border: 1px solid var(--border-color);
-}
-
-.dark .markdown-body pre {
-  background: rgba(0, 0, 0, 0.3);
+  margin: 1.25rem 0;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #cdd6f4;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
 }
 
 .markdown-body pre code {
   background: transparent;
   padding: 0;
+  color: inherit;
+  font-size: 0.9em;
+  line-height: 1.5;
+}
+
+.markdown-body blockquote {
+  border-left: 4px solid var(--accent-color);
+  padding-left: 1rem;
+  margin: 1rem 0;
+  font-style: italic;
+  color: var(--text-secondary);
+}
+
+.markdown-body table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 1rem;
+}
+
+.markdown-body th, .markdown-body td {
+  border: 1px solid var(--border-color);
+  padding: 0.5rem;
+  text-align: left;
+}
+
+.markdown-body th {
+  background: var(--bg-secondary);
 }
 
 .loading-wave {
