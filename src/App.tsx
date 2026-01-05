@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useMemo } from 'react';
 import { MainSidebar } from './components/MainSidebar';
 import { ChatMessage } from './components/ChatMessage';
 import { type Agent } from './services/db';
-import { streamGroqChat, callGroqChat, type GroqMessage } from './services/groq';
+import { callGroqChat, type GroqMessage } from './services/groq';
 import { tools, executeTool } from './services/tools';
 import * as localDb from './services/localSqlite';
 import './index.css';

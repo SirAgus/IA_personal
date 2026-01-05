@@ -29,16 +29,6 @@ export const executeTool = async (name: string, args: any) => {
     if (name === "financego_api_docs") {
         const { action, query } = args;
 
-        // Mapeo de herramientas internas del MCP a las acciones del tool de Groq
-        const toolMap: Record<string, string> = {
-            'list': 'list_all_endpoints',
-            'search': 'search_endpoints',
-            'get_details': 'get_endpoint_info'
-        };
-
-        const internalToolName = toolMap[action];
-        const internalArgs = action === 'list' ? {} : (action === 'search' ? { query } : { filePath: query });
-
         try {
             // Como no queremos implementar todo el protocolo SSE client en frontend, 
             // podemos usar el endpoint /messages del servidor si lo exponemos correctamente,
