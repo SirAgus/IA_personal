@@ -2,7 +2,8 @@ import { useState, useRef, useEffect, useMemo } from 'react';
 import { MainSidebar } from './components/MainSidebar';
 import { ChatMessage } from './components/ChatMessage';
 import { type Agent } from './services/db';
-import { streamGroqChat, type GroqMessage } from './services/groq';
+import { streamGroqChat, callGroqChat, type GroqMessage } from './services/groq';
+import { tools, executeTool } from './services/tools';
 import * as localDb from './services/localSqlite';
 import './index.css';
 
@@ -47,7 +48,7 @@ function App() {
     const saved = localStorage.getItem('user');
     return saved ? JSON.parse(saved) : null;
   });
-  
+
   const [authMode, setAuthMode] = useState<'login' | 'signup' | null>(null);
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
@@ -243,7 +244,7 @@ function App() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Error al iniciar sesión');
-      
+
       setToken(data.token);
       setUser(data.user);
       localStorage.setItem('token', data.token);
@@ -267,7 +268,7 @@ function App() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Error al registrarse');
-      
+
       setToken(data.token);
       setUser(data.user);
       localStorage.setItem('token', data.token);
@@ -309,7 +310,7 @@ function App() {
       if (token) {
         await fetch(`${BACKEND_URL}/threads/${currentThreadId}`, {
           method: 'PATCH',
-          headers: { 
+          headers: {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${token}`
           },
@@ -357,7 +358,7 @@ function App() {
         try {
           const res = await fetch(`${BACKEND_URL}/threads`, {
             method: 'POST',
-            headers: { 
+            headers: {
               'Content-Type': 'application/json',
               'Authorization': `Bearer ${token}`
             },
@@ -416,55 +417,81 @@ function App() {
       throw new Error('Configura tu API key de Groq en la pestaña V2.');
     }
 
-    const contextMessages = allMessages.slice(-10);
-    const groqMessages: GroqMessage[] = [];
+    let currentGroqMessages: GroqMessage[] = [];
     if (agent?.system_prompt) {
-      groqMessages.push({ role: 'system' as const, content: agent.system_prompt });
+      currentGroqMessages.push({ role: 'system', content: agent.system_prompt });
     }
+
+    const contextMessages = allMessages.slice(-10);
     for (const msg of contextMessages) {
-      if (msg.role === 'user' || msg.role === 'assistant' || msg.role === 'system') {
-        groqMessages.push({ role: msg.role, content: msg.content });
-      }
-    }
-
-    setMessages(prev => [...prev, { role: 'assistant', content: '' }]);
-    const startTime = Date.now();
-    let assistantContent = '';
-
-    await streamGroqChat({
-      apiKey: groqApiKey.trim(),
-      model: selectedModel,
-      messages: groqMessages,
-      onDelta: (delta) => {
-        assistantContent += delta;
-        setMessages(prev => {
-          const next = [...prev];
-          const lastMsg = next[next.length - 1];
-          if (lastMsg.role === 'assistant') {
-            lastMsg.content = assistantContent;
-          }
-          return next;
+      if (['user', 'assistant', 'system', 'tool'].includes(msg.role)) {
+        currentGroqMessages.push({
+          role: msg.role as any,
+          content: msg.content
         });
       }
-    });
+    }
 
-    const durationMs = Date.now() - startTime;
-    setMessages(prev => {
-      const next = [...prev];
-      const lastMsg = next[next.length - 1];
-      if (lastMsg.role === 'assistant' && !lastMsg.metrics?.reasoningDurationMs) {
-        lastMsg.metrics = { reasoningDurationMs: durationMs };
-      }
-      return next;
-    });
+    let iterations = 0;
+    const MAX_ITERATIONS = 5;
+    const startTime = Date.now();
 
-    if (threadId) {
-      await localDb.addMessage({
-        thread_id: threadId,
-        role: 'assistant',
-        content: assistantContent,
-        metrics: { reasoningDurationMs: durationMs }
+    while (iterations < MAX_ITERATIONS) {
+      setIsLoading(true);
+
+      // Intentamos llamar a Groq. Si es la primera iteración o después de una herramienta
+      const response = await callGroqChat({
+        apiKey: groqApiKey.trim(),
+        model: selectedModel,
+        messages: currentGroqMessages,
+        tools: tools // Pasamos las definiciones de herramientas
       });
+
+      const assistantMessage = response.choices[0].message;
+      currentGroqMessages.push(assistantMessage);
+
+      // Si no hay tool_calls, terminamos y mostramos el mensaje
+      if (!assistantMessage.tool_calls || assistantMessage.tool_calls.length === 0) {
+        const assistantContent = assistantMessage.content || '';
+        const durationMs = Date.now() - startTime;
+
+        setMessages(prev => [...prev, {
+          role: 'assistant',
+          content: assistantContent,
+          metrics: { reasoningDurationMs: durationMs }
+        }]);
+
+        if (threadId) {
+          await localDb.addMessage({
+            thread_id: threadId,
+            role: 'assistant',
+            content: assistantContent,
+            metrics: { reasoningDurationMs: durationMs }
+          });
+        }
+        break;
+      }
+
+      // Si hay tool_calls, los ejecutamos
+      for (const toolCall of assistantMessage.tool_calls) {
+        const name = toolCall.function.name;
+        const args = JSON.parse(toolCall.function.arguments);
+
+        console.log(`Ejecutando herramienta desde IA_personal: ${name}`, args);
+        const result = await executeTool(name, args);
+
+        currentGroqMessages.push({
+          role: 'tool',
+          tool_call_id: toolCall.id,
+          name: name,
+          content: JSON.stringify(result)
+        });
+
+        // Opcional: Mostrar un mensaje temporal o log de que se está consultando
+        console.log("Resultado de herramienta:", result);
+      }
+
+      iterations++;
     }
   };
 
@@ -603,7 +630,7 @@ function App() {
       {authMode && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in p-4">
           <div className="glass p-8 rounded-2xl w-full max-w-md flex flex-col gap-6 animate-slide-up relative">
-            <button 
+            <button
               onClick={() => setAuthMode(null)}
               className="absolute top-4 right-4 text-gray-400 hover:text-gray-200"
             >
@@ -613,30 +640,30 @@ function App() {
             </button>
 
             <div className="flex justify-center mb-2">
-               <div className="relative">
-                 <div className="absolute -inset-4 bg-blue-500/20 blur-2xl rounded-full animate-pulse"></div>
-                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="w-16 h-16 text-blue-500 relative">
-                   <path d="M12 8V4H8" />
-                   <rect width="16" height="12" x="4" y="8" rx="2" />
-                   <path d="M2 14h2" />
-                   <path d="M20 14h2" />
-                   <path d="M15 13v2" />
-                   <path d="M9 13v2" />
-                 </svg>
-               </div>
+              <div className="relative">
+                <div className="absolute -inset-4 bg-blue-500/20 blur-2xl rounded-full animate-pulse"></div>
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="w-16 h-16 text-blue-500 relative">
+                  <path d="M12 8V4H8" />
+                  <rect width="16" height="12" x="4" y="8" rx="2" />
+                  <path d="M2 14h2" />
+                  <path d="M20 14h2" />
+                  <path d="M15 13v2" />
+                  <path d="M9 13v2" />
+                </svg>
+              </div>
             </div>
             <h2 className="text-3xl font-bold text-center bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
               {authMode === 'login' ? 'Iniciar Sesión' : 'Registrarse'}
             </h2>
-            
+
             <form onSubmit={authMode === 'login' ? handleLogin : handleSignup} className="flex flex-col gap-4">
               <div className="flex flex-col gap-2">
                 <label className="text-sm text-gray-500 dark:text-gray-400">Usuario</label>
-                <input 
-                  type="text" 
-                  className="bg-black/5 dark:bg-black/20 border border-black/10 dark:border-white/10 rounded-lg p-3 text-gray-900 dark:text-white focus:ring-2 ring-blue-500/50 outline-none transition-all" 
-                  value={username} 
-                  onChange={e => setUsername(e.target.value)} 
+                <input
+                  type="text"
+                  className="bg-black/5 dark:bg-black/20 border border-black/10 dark:border-white/10 rounded-lg p-3 text-gray-900 dark:text-white focus:ring-2 ring-blue-500/50 outline-none transition-all"
+                  value={username}
+                  onChange={e => setUsername(e.target.value)}
                   required
                 />
               </div>
@@ -644,11 +671,11 @@ function App() {
               {authMode === 'signup' && (
                 <div className="flex flex-col gap-2">
                   <label className="text-sm text-gray-500 dark:text-gray-400">Email</label>
-                  <input 
-                    type="email" 
-                    className="bg-black/5 dark:bg-black/20 border border-black/10 dark:border-white/10 rounded-lg p-3 text-gray-900 dark:text-white focus:ring-2 ring-blue-500/50 outline-none transition-all" 
-                    value={email} 
-                    onChange={e => setEmail(e.target.value)} 
+                  <input
+                    type="email"
+                    className="bg-black/5 dark:bg-black/20 border border-black/10 dark:border-white/10 rounded-lg p-3 text-gray-900 dark:text-white focus:ring-2 ring-blue-500/50 outline-none transition-all"
+                    value={email}
+                    onChange={e => setEmail(e.target.value)}
                     required
                   />
                 </div>
@@ -667,7 +694,7 @@ function App() {
               </div>
 
               {error && <p className="text-red-500 dark:text-red-400 text-sm text-center animate-shake">{error}</p>}
-              
+
               <button type="submit" className="btn-primary py-3 rounded-lg font-semibold shadow-lg hover:scale-[1.02] active:scale-[0.98] transition-all">
                 {authMode === 'login' ? 'Entrar' : 'Crear Cuenta'}
               </button>
@@ -675,7 +702,7 @@ function App() {
 
             <p className="text-center text-sm text-gray-500">
               {authMode === 'login' ? '¿No tienes cuenta?' : '¿Ya tienes cuenta?'}
-              <button 
+              <button
                 onClick={() => setAuthMode(authMode === 'login' ? 'signup' : 'login')}
                 className="ml-2 text-blue-500 hover:underline font-bold"
               >
@@ -717,7 +744,7 @@ function App() {
             </svg>
           </button>
           <h1 className="text-lg font-bold text-black dark:text-white font-mono tracking-tighter">Athenas AI</h1>
-          <button 
+          <button
             onClick={() => setTheme(t => t === 'light' ? 'dark' : 'light')}
             className="p-2 text-gray-500 dark:text-gray-400"
           >
@@ -752,7 +779,7 @@ function App() {
               <div className="text-sm md:text-base mt-3 text-gray-500 dark:text-gray-400 font-medium tracking-wide text-center">Selecciona un agente o simplemente comienza a escribir.</div>
             </div>
           )}
-          
+
           <div className="space-y-6">
             {groupedMessages.map((m, idx) => (
               <ChatMessage key={idx} message={m} isLoading={isLoading} isLast={idx === groupedMessages.length - 1} />
